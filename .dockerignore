@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.pyc
+node_modules
+web/node_modules
+web/dist
+config/settings.yaml
+*.db
+.env
+.DS_Store

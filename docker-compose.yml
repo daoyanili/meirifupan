@@ -1,0 +1,13 @@
+name: fajiazhifu
+
+services:
+  app:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - DB_PATH=/app/data/market_review.db
+    restart: unless-stopped

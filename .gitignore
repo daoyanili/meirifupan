@@ -1,0 +1,24 @@
+# Dependencies
+web/node_modules/
+
+# Build output
+web/dist/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Data files
+data/
+
+# Sensitive config
+config/token.json
+config/settings.yaml
+
+# OS
+.DS_Store
+
+# IDE
+.claude/
+.codex/
+.playwright-mcp/

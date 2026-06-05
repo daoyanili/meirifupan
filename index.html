@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发家致富 - 涨停复盘</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1117; color: #e1e4e8; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* 顶部导航 */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .header h1 { font-size: 24px; color: #58a6ff; }
+        .date-selector { display: flex; gap: 8px; align-items: center; }
+        .date-selector select { background: #161b22; border: 1px solid #30363d; color: #e1e4e8; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
+        .date-selector button { background: #238636; border: none; color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+
+        /* 统计卡片 */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+        .stat-card .label { font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+        .stat-card .value { font-size: 28px; font-weight: 600; }
+        .stat-card .value.red { color: #f85149; }
+        .stat-card .value.green { color: #3fb950; }
+        .stat-card .value.blue { color: #58a6ff; }
+        .stat-card .value.yellow { color: #d29922; }
+
+        /* 双列布局 */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+
+        /* 卡片 */
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+        .card-header { padding: 12px 16px; border-bottom: 1px solid #30363d; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+        .card-body { padding: 16px; max-height: 500px; overflow-y: auto; }
+
+        /* 热门板块 */
+        .plate-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; }
+        .plate-item:last-child { border-bottom: none; }
+        .plate-name { font-weight: 500; }
+        .plate-score { color: #f85149; font-weight: 600; }
+        .plate-bar { height: 6px; background: #21262d; border-radius: 3px; margin-top: 4px; }
+        .plate-bar-fill { height: 100%; background: linear-gradient(90deg, #f85149, #ff7b72); border-radius: 3px; }
+
+        /* 涨停股表格 */
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 8px 12px; background: #21262d; color: #8b949e; font-weight: 500; position: sticky; top: 0; }
+        td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
+        tr:hover { background: #1c2128; }
+        .stock-code { color: #58a6ff; }
+        .up-time { color: #8b949e; font-size: 12px; }
+        .reason { color: #8b949e; font-size: 12px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+        .tag-1 { background: #1f6feb22; color: #58a6ff; }
+        .tag-2 { background: #238636; color: #3fb950; }
+        .tag-3 { background: #da3633; color: #f85149; }
+        .tag-4 { background: #d29922; color: #e3b341; }
+
+        /* 涨停梯队 */
+        .tier-section { margin-bottom: 16px; }
+        .tier-title { font-size: 14px; color: #f85149; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .tier-count { background: #f85149; color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .tier-stocks { display: flex; flex-wrap: wrap; gap: 8px; }
+        .tier-stock { background: #21262d; padding: 6px 12px; border-radius: 6px; font-size: 13px; }
+        .tier-stock .name { color: #e1e4e8; }
+        .tier-stock .time { color: #8b949e; font-size: 11px; margin-left: 4px; }
+
+        /* 加载状态 */
+        .loading { text-align: center; padding: 40px; color: #8b949e; }
+        .error { color: #f85149; text-align: center; padding: 20px; }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #161b22; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部 -->
+        <div class="header">
+            <h1>📈 发家致富 - 涨停复盘</h1>
+            <div class="date-selector">
+                <select id="dateSelect"></select>
+                <button onclick="loadData()">刷新</button>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="label">涨停板块数</div>
+                <div class="value red" id="statPlates">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">涨停股数</div>
+                <div class="value green" id="statStocks">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">热门板块</div>
+                <div class="value blue" id="statHot">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">首板 / 连板</div>
+                <div class="value yellow" id="statTiers">-</div>
+            </div>
+        </div>
+
+        <!-- 涨停梯队 + 热门板块 -->
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header">🔥 涨停梯队</div>
+                <div class="card-body" id="tiers"></div>
+            </div>
+            <div class="card">
+                <div class="card-header">📊 热门板块 Top 10</div>
+                <div class="card-body" id="hotPlates"></div>
+            </div>
+        </div>
+
+        <!-- 涨停股列表 -->
+        <div class="card">
+            <div class="card-header">
+                <span>📋 涨停股明细</span>
+                <select id="plateFilter" onchange="filterStocks()" style="background:#21262d;border:1px solid #30363d;color:#e1e4e8;padding:4px 8px;border-radius:4px;font-size:12px;">
+                    <option value="all">全部板块</option>
+                </select>
+            </div>
+            <div class="card-body" style="max-height: 600px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>股票</th>
+                            <th>代码</th>
+                            <th>板块</th>
+                            <th>涨停时间</th>
+                            <th>连板</th>
+                            <th>涨停原因</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stockTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = null;
+        let allStocks = [];
+
+        // 可用日期
+        const dates = [
+            '2026-06-01', '2026-05-28', '2026-05-27', '2026-05-26',
+            '2026-05-25', '2026-05-22', '2026-05-20', '2026-05-19',
+            '2026-05-18', '2026-05-15', '2026-05-14', '2026-05-13',
+            '2026-05-12'
+        ];
+
+        // 初始化日期选择器
+        const dateSelect = document.getElementById('dateSelect');
+        dates.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            dateSelect.appendChild(opt);
+        });
+        dateSelect.onchange = loadData;
+
+        // 加载数据
+        async function loadData() {
+            const date = dateSelect.value;
+            try {
+                const resp = await fetch(`data/uplimit/uplimit_${date}.json`);
+                if (!resp.ok) throw new Error('数据加载失败');
+                currentData = await resp.json();
+                render();
+            } catch (e) {
+                document.getElementById('stockTable').innerHTML = `<tr><td colspan="6" class="error">加载失败: ${e.message}</td></tr>`;
+            }
+        }
+
+        // 渲染页面
+        function render() {
+            if (!currentData) return;
+
+            const { uplimit_reason, uplimit_hot, plate_rank } = currentData;
+
+            // 统计
+            const totalPlates = uplimit_reason.length;
+            const totalStocks = uplimit_reason.reduce((sum, p) => sum + (p.stocks?.length || 0), 0);
+            const hotCount = uplimit_hot.length;
+
+            // 统计连板
+            let firstBoard = 0, multiBoard = 0;
+            allStocks = [];
+            uplimit_reason.forEach(plate => {
+                (plate.stocks || []).forEach(s => {
+                    allStocks.push({ ...s, plate_name: plate.plate_name });
+                    if (s.up_limit_desc?.includes('首板')) firstBoard++;
+                    else multiBoard++;
+                });
+            });
+
+            document.getElementById('statPlates').textContent = totalPlates;
+            document.getElementById('statStocks').textContent = totalStocks;
+            document.getElementById('statHot').textContent = hotCount;
+            document.getElementById('statTiers').textContent = `${firstBoard} / ${multiBoard}`;
+
+            // 涨停梯队
+            renderTiers();
+
+            // 热门板块
+            renderHotPlates();
+
+            // 板块筛选器
+            renderPlateFilter();
+
+            // 涨停股表格
+            renderStockTable();
+        }
+
+        // 渲染涨停梯队
+        function renderTiers() {
+            const container = document.getElementById('tiers');
+            // 按连板数分组
+            const tiers = {};
+            allStocks.forEach(s => {
+                const desc = s.up_limit_desc || '首板';
+                const match = desc.match(/(\d+)板/);
+                const num = match ? parseInt(match[1]) : 1;
+                if (!tiers[num]) tiers[num] = [];
+                tiers[num].push(s);
+            });
+
+            let html = '';
+            Object.keys(tiers).sort((a, b) => b - a).forEach(num => {
+                const stocks = tiers[num];
+                html += `<div class="tier-section">
+                    <div class="tier-title">${num}板 <span class="tier-count">${stocks.length}</span></div>
+                    <div class="tier-stocks">
+                        ${stocks.map(s => `<div class="tier-stock"><span class="name">${s.stock_name}</span><span class="time">${s.up_limit_time}</span></div>`).join('')}
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html || '<div class="loading">无数据</div>';
+        }
+
+        // 渲染热门板块
+        function renderHotPlates() {
+            const container = document.getElementById('hotPlates');
+            const hotPlates = currentData.uplimit_hot || [];
+            const maxScore = hotPlates[0]?.[2] || 1;
+
+            let html = '';
+            hotPlates.slice(0, 10).forEach((p, i) => {
+                const [name, code, score] = p;
+                const pct = (score / maxScore * 100).toFixed(0);
+                html += `<div class="plate-item">
+                    <div style="flex:1">
+                        <div style="display:flex;justify-content:space-between">
+                            <span class="plate-name">${i + 1}. ${name}</span>
+                            <span class="plate-score">${score}</span>
+                        </div>
+                        <div class="plate-bar"><div class="plate-bar-fill" style="width:${pct}%"></div></div>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html || '<div class="loading">无数据</div>';
+        }
+
+        // 渲染板块筛选器
+        function renderPlateFilter() {
+            const select = document.getElementById('plateFilter');
+            const plates = [...new Set(allStocks.map(s => s.plate_name))].sort();
+            select.innerHTML = '<option value="all">全部板块</option>' +
+                plates.map(p => `<option value="${p}">${p}</option>`).join('');
+        }
+
+        // 渲染涨停股表格
+        function renderStockTable(filter = 'all') {
+            const tbody = document.getElementById('stockTable');
+            const stocks = filter === 'all' ? allStocks : allStocks.filter(s => s.plate_name === filter);
+
+            // 按涨停时间排序
+            stocks.sort((a, b) => (a.up_limit_time || '').localeCompare(b.up_limit_time || ''));
+
+            tbody.innerHTML = stocks.slice(0, 200).map(s => {
+                const desc = s.up_limit_desc || '首板';
+                const isMulti = !desc.includes('首板');
+                return `<tr>
+                    <td><strong>${s.stock_name}</strong></td>
+                    <td class="stock-code">${s.stock_code}</td>
+                    <td>${s.plate_name}</td>
+                    <td class="up-time">${s.up_limit_time || '-'}</td>
+                    <td><span class="tag ${isMulti ? 'tag-3' : 'tag-1'}">${desc}</span></td>
+                    <td class="reason" title="${(s.reason || '').replace(/"/g, '&quot;')}">${s.reason || '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // 筛选
+        function filterStocks() {
+            const filter = document.getElementById('plateFilter').value;
+            renderStockTable(filter);
+        }
+
+        // 初始加载
+        loadData();
+    </script>
+</body>
+</html>
