@@ -280,6 +280,44 @@ class MarketDB:
                 on lhb_daily(trade_date);
             create index if not exists idx_stock_kline_daily_date
                 on stock_kline_daily(trade_date);
+
+            create table if not exists hot_stocks (
+                trade_date text not null,
+                rank_no integer not null,
+                stock_code text not null,
+                stock_name text,
+                latest_price real,
+                change_pct real,
+                change_amount real,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(trade_date, stock_code)
+            );
+
+            create table if not exists hot_boards (
+                trade_date text not null,
+                board_type text not null,
+                rank_no integer not null,
+                board_code text not null,
+                board_name text,
+                latest_price real,
+                change_pct real,
+                change_amount real,
+                total_market_cap real,
+                turnover_rate real,
+                up_count integer,
+                down_count integer,
+                leading_stock text,
+                leading_stock_change real,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(trade_date, board_type, board_code)
+            );
+
+            create index if not exists idx_hot_stocks_date_rank
+                on hot_stocks(trade_date, rank_no);
+            create index if not exists idx_hot_boards_date_type_rank
+                on hot_boards(trade_date, board_type, rank_no);
             """
         )
         self.conn.commit()
@@ -591,6 +629,73 @@ class MarketDB:
                 params={"period": period},
                 payload={"kline": kline_data},
             )
+        self.conn.commit()
+        return count
+
+    def import_hot_stocks(self, trade_date: str, records: list[dict[str, Any]]) -> int:
+        """导入热门股票人气榜数据"""
+        self._upsert_trade_day(trade_date)
+        count = 0
+        for r in records:
+            stock_code = r.get("stock_code", "")
+            if not stock_code:
+                continue
+            self._upsert_stock(stock_code, r.get("stock_name"))
+            self.conn.execute(
+                """
+                insert into hot_stocks(trade_date, rank_no, stock_code, stock_name, latest_price, change_pct, change_amount)
+                values(?, ?, ?, ?, ?, ?, ?)
+                on conflict(trade_date, stock_code) do update set
+                    rank_no = excluded.rank_no,
+                    stock_name = excluded.stock_name,
+                    latest_price = excluded.latest_price,
+                    change_pct = excluded.change_pct,
+                    change_amount = excluded.change_amount,
+                    updated_at = current_timestamp
+                """,
+                (trade_date, r["rank_no"], stock_code, r.get("stock_name"),
+                 r.get("latest_price"), r.get("change_pct"), r.get("change_amount")),
+            )
+            count += 1
+        self.conn.commit()
+        return count
+
+    def import_hot_boards(self, trade_date: str, records: list[dict[str, Any]], board_type: str) -> int:
+        """导入热门板块数据（concept=概念板块, industry=行业板块）"""
+        self._upsert_trade_day(trade_date)
+        count = 0
+        for r in records:
+            board_code = r.get("board_code", "")
+            if not board_code:
+                board_code = f"ths_{r.get('board_name', '')}"
+            self._upsert_plate(board_code, r.get("board_name"))
+            self.conn.execute(
+                """
+                insert into hot_boards(trade_date, board_type, rank_no, board_code, board_name,
+                    latest_price, change_pct, change_amount, total_market_cap, turnover_rate,
+                    up_count, down_count, leading_stock, leading_stock_change)
+                values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(trade_date, board_type, board_code) do update set
+                    rank_no = excluded.rank_no,
+                    board_name = excluded.board_name,
+                    latest_price = excluded.latest_price,
+                    change_pct = excluded.change_pct,
+                    change_amount = excluded.change_amount,
+                    total_market_cap = excluded.total_market_cap,
+                    turnover_rate = excluded.turnover_rate,
+                    up_count = excluded.up_count,
+                    down_count = excluded.down_count,
+                    leading_stock = excluded.leading_stock,
+                    leading_stock_change = excluded.leading_stock_change,
+                    updated_at = current_timestamp
+                """,
+                (trade_date, board_type, r["rank_no"], board_code, r.get("board_name"),
+                 r.get("latest_price"), r.get("change_pct"), r.get("change_amount"),
+                 r.get("total_market_cap"), r.get("turnover_rate"),
+                 r.get("up_count"), r.get("down_count"),
+                 r.get("leading_stock"), r.get("leading_stock_change")),
+            )
+            count += 1
         self.conn.commit()
         return count
 

@@ -522,3 +522,48 @@ def get_hot_stocks_derived(conn: sqlite3.Connection, date: str) -> list[dict[str
         result.append(d)
 
     return result
+
+
+def get_hot_stocks_rank(conn: sqlite3.Connection, date: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Get hot stock rankings from hot_stocks table."""
+    rows = conn.execute(
+        """
+        SELECT rank_no, stock_code, stock_name, latest_price, change_pct, change_amount
+        FROM hot_stocks
+        WHERE trade_date = ?
+        ORDER BY rank_no
+        LIMIT ?
+        """,
+        (date, limit),
+    ).fetchall()
+    return _rows_to_list(rows)
+
+
+def get_hot_boards_rank(conn: sqlite3.Connection, date: str, board_type: str = "concept", limit: int = 20) -> list[dict[str, Any]]:
+    """Get hot board rankings from hot_boards table."""
+    rows = conn.execute(
+        """
+        SELECT rank_no, board_code, board_name, latest_price, change_pct, change_amount,
+               total_market_cap, turnover_rate, up_count, down_count,
+               leading_stock, leading_stock_change
+        FROM hot_boards
+        WHERE trade_date = ? AND board_type = ?
+        ORDER BY rank_no
+        LIMIT ?
+        """,
+        (date, board_type, limit),
+    ).fetchall()
+    return _rows_to_list(rows)
+
+
+def get_hot_available_dates(conn: sqlite3.Connection) -> list[str]:
+    """Get dates that have hot stock/board data."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT trade_date FROM hot_stocks
+        UNION
+        SELECT DISTINCT trade_date FROM hot_boards
+        ORDER BY trade_date DESC
+        """
+    ).fetchall()
+    return [r["trade_date"] for r in rows]

@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY server/requirements.txt ./server/
-RUN pip install --no-cache-dir -r server/requirements.txt
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -r server/requirements.txt
 
 # Copy backend code
 COPY server/ ./server/

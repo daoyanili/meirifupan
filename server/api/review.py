@@ -12,8 +12,11 @@ from server.services.review_queries import (
     get_capital_flow,
     get_dates,
     get_high_stocks,
+    get_hot_boards_rank,
     get_hot_plates,
     get_hot_stocks_derived,
+    get_hot_stocks_rank,
+    get_hot_available_dates,
     get_indices,
     get_limit_up_stats,
     get_connection,
@@ -117,5 +120,35 @@ def get_insights(date: str = Query(..., description="Trade date, e.g. 2026-06-03
             "capital_flow": capital_flow,
             "hot_stocks": hot_stocks,
         }
+    finally:
+        conn.close()
+
+
+@router.get("/api/hot")
+def get_hot(date: str = Query(..., description="Trade date, e.g. 2026-06-03")):
+    """Return hot stocks and hot boards for a given date."""
+    conn = get_connection()
+    try:
+        hot_stocks = get_hot_stocks_rank(conn, date, limit=30)
+        concept_boards = get_hot_boards_rank(conn, date, board_type="concept", limit=20)
+        industry_boards = get_hot_boards_rank(conn, date, board_type="industry", limit=20)
+
+        return {
+            "date": date,
+            "hot_stocks": hot_stocks,
+            "concept_boards": concept_boards,
+            "industry_boards": industry_boards,
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/api/hot/dates")
+def get_hot_dates():
+    """Return available dates for hot data."""
+    conn = get_connection()
+    try:
+        dates = get_hot_available_dates(conn)
+        return {"dates": dates}
     finally:
         conn.close()
