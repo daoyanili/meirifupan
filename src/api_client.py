@@ -1,4 +1,4 @@
-"""quant.zizizaizai.com API 客户端"""
+"""第三方行情数据 API 客户端"""
 
 import json
 import ssl
@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 
 class QuantAPI:
-    BASE_URL = "https://api.zizizaizai.com"
+    BASE_URL = "https://api.zizizaizai.com"  # 数据接口地址，按需替换
 
     def __init__(self, token: str = None):
         self.token = token

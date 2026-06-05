@@ -505,7 +505,7 @@ limit_up_count: {limit_up_total}
 
 ---
 *报告生成时间：{generated_at}*
-*数据来源：quant.zizizaizai.com*
+*数据来源：第三方公开行情数据*
 ```
 
 ---
@@ -622,7 +622,7 @@ obsidian:
   review_dir: "发家致富/复盘"
 
 api:
-  base_url: "https://api.zizizaizai.com"
+  base_url: ""  # 数据接口地址，按需填写
   token: ""  # 可选
 
 emotion:

@@ -62,7 +62,7 @@ limit_up_plate_map    一只股票一天可以关联多个板块
 
 ## 数据获取方式
 
-当前主数据源是 `quant.zizizaizai.com`，由 `src/api_client.py` 封装接口。
+当前主数据源由 `src/api_client.py` 封装接口。
 
 已经接入并落库：
 

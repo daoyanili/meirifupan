@@ -3,11 +3,11 @@
 ## 环境要求
 
 - Python 3.x
-- 网络连接（访问 quant.zizizaizai.com）
+- 网络连接
 
 ## 第一步：获取 Token
 
-1. 浏览器打开 https://quant.zizizaizai.com
+1. 浏览器打开数据平台
 2. 登录账号
 3. 打开开发者工具（F12）→ Application → Local Storage
 4. 复制 token 值

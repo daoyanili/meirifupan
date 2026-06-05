@@ -122,7 +122,7 @@ def main():
     # 加载 token
     token = load_token()
     if not token:
-        print("❌ 未找到 token，请先在浏览器登录 quant.zizizaizai.com")
+        print("❌ 未找到 token，请先在浏览器登录数据平台获取")
         print("   或手动将 token 保存到 config/token.json")
         return
 

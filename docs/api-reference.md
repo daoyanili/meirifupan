@@ -2,7 +2,7 @@
 
 ## 基础信息
 
-- **Base URL**: `https://api.zizizaizai.com`
+- **Base URL**: 见 `src/api_client.py` 配置
 - **认证方式**: Bearer Token（JWT）
 - **客户端**: `src/api_client.py`
 
