@@ -159,6 +159,25 @@ class MarketDB:
                 primary key(plate_code, trade_date)
             );
 
+            create table if not exists plate_index_daily (
+                plate_code text not null,
+                trade_date text not null,
+                plate_name text,
+                board_type text,
+                source text,
+                open_price real,
+                high_price real,
+                low_price real,
+                close_price real,
+                change_pct real,
+                volume real,
+                amount real,
+                raw_payload text,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(plate_code, trade_date, source)
+            );
+
             create table if not exists plate_reasons (
                 plate_code text primary key,
                 plate_name text,
@@ -364,6 +383,8 @@ class MarketDB:
                 on plate_hot_rank(trade_date, rank_no);
             create index if not exists idx_plate_daily_date_rank
                 on plate_daily(trade_date, rank_no);
+            create index if not exists idx_plate_index_daily_date
+                on plate_index_daily(trade_date);
             create index if not exists idx_raw_api_responses_endpoint
                 on raw_api_responses(endpoint, trade_date);
             create index if not exists idx_movement_alerts_date_time
@@ -1211,6 +1232,59 @@ class MarketDB:
                     r.get("low_price"),
                     r.get("close_price"),
                     r.get("change_pct"),
+                    r.get("amount"),
+                    _json_text(r.get("raw_payload") or r),
+                ),
+            )
+            count += 1
+        self.conn.commit()
+        return count
+
+    def import_plate_index_daily(self, records: list[dict[str, Any]]) -> int:
+        """导入真实板块指数日 K 数据。"""
+        count = 0
+        for r in records:
+            plate_code = str(r.get("plate_code") or "")
+            trade_date = str(r.get("trade_date") or "")
+            source = str(r.get("source") or "")
+            if not plate_code or not trade_date or not source:
+                continue
+            plate_name = r.get("plate_name")
+            self._upsert_trade_day(trade_date)
+            self._upsert_plate(plate_code, plate_name)
+            self.conn.execute(
+                """
+                insert into plate_index_daily(
+                    plate_code, trade_date, plate_name, board_type, source,
+                    open_price, high_price, low_price, close_price, change_pct,
+                    volume, amount, raw_payload
+                )
+                values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(plate_code, trade_date, source) do update set
+                    plate_name = excluded.plate_name,
+                    board_type = excluded.board_type,
+                    open_price = excluded.open_price,
+                    high_price = excluded.high_price,
+                    low_price = excluded.low_price,
+                    close_price = excluded.close_price,
+                    change_pct = excluded.change_pct,
+                    volume = excluded.volume,
+                    amount = excluded.amount,
+                    raw_payload = excluded.raw_payload,
+                    updated_at = current_timestamp
+                """,
+                (
+                    plate_code,
+                    trade_date,
+                    plate_name,
+                    r.get("board_type"),
+                    source,
+                    r.get("open_price"),
+                    r.get("high_price"),
+                    r.get("low_price"),
+                    r.get("close_price"),
+                    r.get("change_pct"),
+                    r.get("volume"),
                     r.get("amount"),
                     _json_text(r.get("raw_payload") or r),
                 ),

@@ -789,6 +789,29 @@ html, body {
   border-top: 1px solid var(--border-color);
 }
 
+.report-index-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.report-index-strip strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-source {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .report-plate,
 .report-stock-row {
   padding: 10px 0;
@@ -883,6 +906,18 @@ html, body {
   overflow: hidden;
   margin-top: 4px;
   color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.report-event-reason {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
   word-break: break-word;

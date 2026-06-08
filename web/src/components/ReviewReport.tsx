@@ -164,7 +164,8 @@ export function ReviewReport({ review }: Props) {
 
 function PlateReviewCard({ plate }: { plate: SavedReviewPlateReview }) {
   const trendClass = plate.trend === '升温' || plate.trend === '持续活跃' ? 'tag-red' : plate.trend === '降温' ? 'tag-green' : 'tag-blue'
-  const path = plate.activity?.map(item => item.limit_up_count ?? 0).join(' / ') || '-'
+  const index = plate.index_summary
+  const peak = Math.max(0, ...(plate.activity?.map(item => item.limit_up_count ?? 0) ?? []))
 
   return (
     <div className="report-plate-review">
@@ -174,11 +175,19 @@ function PlateReviewCard({ plate }: { plate: SavedReviewPlateReview }) {
       </div>
       <p className="report-focus-text">{plate.review_text}</p>
       <div className="report-tags">
-        <span className="tag tag-blue">涨停活跃度</span>
         <span className="tag tag-blue">近{plate.window_days}日活跃 {plate.active_days}天</span>
         <span className="tag">今日 {plate.today_limit_up_count}只</span>
-        <span className="tag">路径 {path}</span>
+        <span className="tag">高点 {peak}只</span>
       </div>
+      {index && (
+        <div className="report-index-strip">
+          <span>真实走势</span>
+          <strong className={changeClass(index.today_change_pct)}>今日 {fmtPct(index.today_change_pct)}</strong>
+          <strong className={changeClass(index.window_change_pct)}>近{index.window_days ?? plate.window_days}日 {fmtPct(index.window_change_pct)}</strong>
+          <span>成交 {fmtMoney(index.amount)}</span>
+          {index.source && <span className="report-source">{index.source}</span>}
+        </div>
+      )}
       {plate.core_stocks.length > 0 && (
         <div className="report-plate-core">
           {plate.core_stocks.slice(0, 4).map(stock => (
@@ -190,6 +199,7 @@ function PlateReviewCard({ plate }: { plate: SavedReviewPlateReview }) {
                 </div>
                 <small>{compactParts([stock.stock_code, stock.is_today_limit_up ? '今日涨停' : null, stock.active_days != null ? `活跃${stock.active_days}天` : null])}</small>
                 {stock.reason && <div className="report-watch-reason">{stock.reason}</div>}
+                {stock.event_reason && <div className="report-event-reason">{stock.event_reason}</div>}
               </div>
               <div className="report-stock-meta">
                 <span className="tag tag-yellow">{stock.highest_board ?? 1}板</span>

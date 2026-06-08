@@ -24,6 +24,7 @@ class MarketDbTests(unittest.TestCase):
             "plate_hot_rank",
             "plate_daily",
             "plate_trends",
+            "plate_index_daily",
             "plate_reasons",
             "lhb_daily",
             "movement_alerts",
@@ -52,6 +53,113 @@ class MarketDbTests(unittest.TestCase):
             db.close()
 
         self.assertTrue(expected_tables.issubset(tables))
+
+    def test_import_plate_index_daily_keeps_real_board_ohlc(self):
+        from db import MarketDB
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            count = db.import_plate_index_daily([
+                {
+                    "plate_code": "801159",
+                    "plate_name": "机器人概念",
+                    "board_type": "concept",
+                    "source": "ths_concept_index",
+                    "trade_date": "2026-06-04",
+                    "open_price": 4153.07,
+                    "high_price": 4185.678,
+                    "low_price": 4134.25,
+                    "close_price": 4159.71,
+                    "change_pct": -0.67,
+                    "volume": 31458318000,
+                    "amount": 825457400000,
+                    "raw_payload": {"matched_name": "机器人概念"},
+                },
+                {
+                    "plate_code": "801159",
+                    "plate_name": "机器人概念",
+                    "board_type": "concept",
+                    "source": "ths_concept_index",
+                    "trade_date": "2026-06-05",
+                    "open_price": 4149.977,
+                    "high_price": 4271.662,
+                    "low_price": 4089.864,
+                    "close_price": 4202.37,
+                    "change_pct": 1.03,
+                    "volume": 38270035000,
+                    "amount": 946660100000,
+                    "raw_payload": {"matched_name": "机器人概念"},
+                },
+            ])
+            db.close()
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                select plate_name, board_type, source, close_price, change_pct, amount, raw_payload
+                from plate_index_daily
+                where plate_code = '801159' and trade_date = '2026-06-05'
+                """
+            ).fetchone()
+            conn.close()
+
+        self.assertEqual(2, count)
+        self.assertEqual("机器人概念", row["plate_name"])
+        self.assertEqual("concept", row["board_type"])
+        self.assertEqual("ths_concept_index", row["source"])
+        self.assertEqual(4202.37, row["close_price"])
+        self.assertEqual(1.03, row["change_pct"])
+        self.assertIn("机器人概念", row["raw_payload"])
+
+    def test_resolve_ths_symbol_matches_common_local_plate_names(self):
+        from fetch_plate_index_daily import resolve_ths_symbol
+
+        concept_names = {"芯片概念", "股权转让(并购重组)", "2026一季报预增", "机器人概念"}
+        industry_names = {"半导体"}
+
+        self.assertEqual(("concept", "芯片概念"), resolve_ths_symbol("芯片", concept_names, industry_names))
+        self.assertEqual(("concept", "股权转让(并购重组)"), resolve_ths_symbol("股权转让", concept_names, industry_names))
+        self.assertEqual(("concept", "2026一季报预增"), resolve_ths_symbol("一季报增长", concept_names, industry_names))
+        self.assertEqual(("concept", "机器人概念"), resolve_ths_symbol("机器人概念", concept_names, industry_names))
+
+    def test_resolve_ths_symbol_uses_unique_clean_name_match(self):
+        from fetch_plate_index_daily import resolve_ths_symbol
+
+        concept_names = {"金属新材料", "汽车芯片", "汽车零部件"}
+        industry_names = {"房地产"}
+
+        self.assertEqual(("concept", "金属新材料"), resolve_ths_symbol("新材料概念", concept_names, industry_names))
+        self.assertEqual(("industry", "房地产"), resolve_ths_symbol("地产链", concept_names, industry_names))
+        self.assertIsNone(resolve_ths_symbol("汽车类", concept_names, industry_names))
+
+    def test_recent_core_plates_include_recent_hot_rank_plates(self):
+        from db import MarketDB
+        from fetch_plate_index_daily import get_recent_core_plates
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            db.import_uplimit_day({
+                "date": "2026-06-05",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "809999",
+                        "plate_name": "杂项",
+                        "stocks": [{"stock_code": "600001", "stock_name": "杂项股"}],
+                    }
+                ],
+                "uplimit_hot": [["芯片", "801001", 5460], ["杂项", "809999", 100]],
+                "plate_rank": [],
+            }, raw_source="unit-test")
+            db.close()
+
+            plates = get_recent_core_plates(db_path, end_date="2026-06-05", review_days=1, per_day_limit=2)
+
+        self.assertTrue(any(plate["plate_code"] == "801001" for plate in plates))
 
     def test_import_uplimit_day_deduplicates_stocks_and_keeps_plate_links(self):
         from db import MarketDB
@@ -761,6 +869,50 @@ class MarketDbTests(unittest.TestCase):
                     "change_amount": 1.3,
                 }
             ])
+            db.import_plate_index_daily([
+                {
+                    "plate_code": "801001",
+                    "plate_name": "芯片",
+                    "board_type": "concept",
+                    "source": "ths_concept_index",
+                    "trade_date": "2026-06-03",
+                    "open_price": 100,
+                    "high_price": 103,
+                    "low_price": 99,
+                    "close_price": 101,
+                    "change_pct": None,
+                    "volume": 1000,
+                    "amount": 10_000,
+                },
+                {
+                    "plate_code": "801001",
+                    "plate_name": "芯片",
+                    "board_type": "concept",
+                    "source": "ths_concept_index",
+                    "trade_date": "2026-06-04",
+                    "open_price": 101,
+                    "high_price": 106,
+                    "low_price": 100,
+                    "close_price": 105,
+                    "change_pct": 3.96,
+                    "volume": 1200,
+                    "amount": 12_000,
+                },
+                {
+                    "plate_code": "801001",
+                    "plate_name": "芯片",
+                    "board_type": "concept",
+                    "source": "ths_concept_index",
+                    "trade_date": "2026-06-05",
+                    "open_price": 105,
+                    "high_price": 109,
+                    "low_price": 104,
+                    "close_price": 108,
+                    "change_pct": 2.86,
+                    "volume": 1500,
+                    "amount": 15_000,
+                },
+            ])
             db.close()
 
             review = generate_daily_review("2026-06-05", db_path=db_path, output_dir=out_dir)
@@ -774,7 +926,12 @@ class MarketDbTests(unittest.TestCase):
         plate = review["plate_reviews"][0]
         self.assertEqual("芯片", plate["plate_name"])
         self.assertEqual("limit_up_activity", plate["data_scope"])
+        self.assertEqual("ths_concept_index", plate["index_summary"]["source"])
+        self.assertEqual(2.86, plate["index_summary"]["today_change_pct"])
+        self.assertGreater(plate["index_summary"]["window_change_pct"], 0)
         self.assertGreaterEqual(plate["active_days"], 3)
+        self.assertIn("真实涨跌", plate["review_text"])
+        self.assertNotIn("涨停家数路径", plate["review_text"])
         self.assertIn("近", plate["review_text"])
         self.assertIn("今天", plate["review_text"])
         self.assertTrue(plate["core_stocks"])

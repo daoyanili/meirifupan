@@ -350,6 +350,7 @@ def _plate_review_text(
     dates: list[str],
     activity: list[dict[str, Any]],
     core_stocks: list[dict[str, Any]],
+    index_summary: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     counts = [_safe_int(item.get("limit_up_count")) for item in activity]
     today = counts[-1] if counts else 0
@@ -366,6 +367,25 @@ def _plate_review_text(
         trend = "观察"
 
     leader_text = "、".join(stock["stock_name"] for stock in core_stocks[:3] if stock.get("stock_name")) or "-"
+    index_text = ""
+    if index_summary:
+        today_change = index_summary.get("today_change_pct")
+        window_change = index_summary.get("window_change_pct")
+        index_text = (
+            f"真实涨跌：今日 {_fmt_pct(today_change)}，"
+            f"近{index_summary.get('window_days') or len(dates)}日 {_fmt_pct(window_change)}。"
+        )
+    delta = today - yesterday
+    if len(counts) >= 2:
+        if delta > 0:
+            heat_text = f"今天涨停从 {yesterday} 只增到 {today} 只"
+        elif delta < 0:
+            heat_text = f"今天涨停从 {yesterday} 只降到 {today} 只"
+        else:
+            heat_text = f"今天涨停维持在 {today} 只"
+    else:
+        heat_text = f"今天涨停 {today} 只"
+    activity_text = f"近{len(dates)}日有 {active_days} 天出现在涨停池，期间单日最高 {max_count} 只"
     if trend == "升温":
         action = "明天看前排能不能继续顶住，后排补涨才有意义。"
     elif trend == "降温":
@@ -376,11 +396,54 @@ def _plate_review_text(
         action = "明天只先当观察方向，看有没有新的前排确认。"
 
     text = (
-        f"近{len(dates)}个交易日活跃 {active_days} 天，涨停家数路径 {counts}，"
-        f"今天 {today} 只，较前一日 {'+' if today - yesterday > 0 else ''}{today - yesterday}。"
-        f"核心看 {leader_text}。{action}"
+        f"{activity_text}，{heat_text}。"
+        f"{index_text}核心看 {leader_text}。{action}"
     )
     return trend, text
+
+
+def _plate_index_summary(
+    conn: sqlite3.Connection,
+    plate_code: str,
+    trade_date: str,
+    dates: list[str],
+) -> dict[str, Any] | None:
+    if not dates:
+        return None
+    rows = _rows(
+        conn,
+        """
+        select plate_code, plate_name, trade_date, source, board_type,
+               open_price, high_price, low_price, close_price, change_pct,
+               volume, amount
+        from plate_index_daily
+        where plate_code = ? and trade_date <= ?
+        order by trade_date desc
+        limit ?
+        """,
+        (plate_code, trade_date, len(dates)),
+    )
+    if not rows:
+        return None
+    rows = list(reversed(rows))
+    first_close = rows[0].get("close_price")
+    last_close = rows[-1].get("close_price")
+    window_change = None
+    if first_close and last_close is not None:
+        window_change = round((last_close - first_close) / first_close * 100, 2)
+    return {
+        "source": rows[-1].get("source"),
+        "board_type": rows[-1].get("board_type"),
+        "window_days": len(rows),
+        "start_trade_date": rows[0].get("trade_date"),
+        "end_trade_date": rows[-1].get("trade_date"),
+        "start_close": first_close,
+        "end_close": last_close,
+        "today_change_pct": rows[-1].get("change_pct"),
+        "window_change_pct": window_change,
+        "amount": rows[-1].get("amount"),
+        "series": rows,
+    }
 
 
 def build_plate_reviews(
@@ -403,7 +466,8 @@ def build_plate_reviews(
         if core_set and any(len(core_set & existing) >= min(3, len(core_set), len(existing)) for existing in seen_core_sets):
             continue
         seen_core_sets.append(core_set)
-        trend, text = _plate_review_text(plate.get("plate_name") or plate_code, dates, activity, core_stocks)
+        index_summary = _plate_index_summary(conn, plate_code, trade_date, dates)
+        trend, text = _plate_review_text(plate.get("plate_name") or plate_code, dates, activity, core_stocks, index_summary)
         reviews.append(
             {
                 "plate_code": plate_code,
@@ -414,6 +478,7 @@ def build_plate_reviews(
                 "today_limit_up_count": activity[-1]["limit_up_count"] if activity else 0,
                 "trend": trend,
                 "review_text": text,
+                "index_summary": index_summary,
                 "activity": activity,
                 "core_stocks": core_stocks,
             }

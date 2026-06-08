@@ -230,6 +230,25 @@ export interface SavedReviewPlateCoreStock {
   event_reason?: string | null
 }
 
+export interface SavedReviewPlateIndexSummary {
+  source?: string
+  board_type?: string
+  window_days?: number
+  start_trade_date?: string
+  end_trade_date?: string
+  start_close?: number | null
+  end_close?: number | null
+  today_change_pct?: number | null
+  window_change_pct?: number | null
+  amount?: number | null
+  series?: Array<{
+    trade_date: string
+    close_price?: number | null
+    change_pct?: number | null
+    amount?: number | null
+  }>
+}
+
 export interface SavedReviewPlateReview {
   plate_code: string
   plate_name: string
@@ -239,6 +258,7 @@ export interface SavedReviewPlateReview {
   today_limit_up_count: number
   trend: string
   review_text: string
+  index_summary?: SavedReviewPlateIndexSummary | null
   activity: SavedReviewPlateActivity[]
   core_stocks: SavedReviewPlateCoreStock[]
 }
