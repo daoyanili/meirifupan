@@ -107,6 +107,10 @@ export interface MarketOverviewTrendItem {
   down_count: number
   flat_count: number
   up_rate: number | null
+  down_rate?: number | null
+  avg_change_pct?: number | null
+  natural_limit_up_count?: number | null
+  natural_limit_down_count?: number | null
   limit_up_count: number
   has_limit_up_events?: boolean
   limit_down_count: number
@@ -410,6 +414,9 @@ export interface HotStockRank {
   latest_price: number | null
   change_pct: number | null
   change_amount: number | null
+  amount?: number | null
+  turnover_rate?: number | null
+  source?: string | null
 }
 
 export interface HotBoardRank {
@@ -432,4 +439,83 @@ export interface HotData {
   hot_stocks: HotStockRank[]
   concept_boards: HotBoardRank[]
   industry_boards: HotBoardRank[]
+}
+
+export interface QuantzzMissingSource {
+  key: string
+  title: string
+  status: 'missing' | 'skipped' | string
+  reason: string
+}
+
+export interface QuantzzSpaceBoard {
+  highest_board: number
+  stocks: Array<{
+    stock_code: string
+    stock_name: string
+    up_limit_keep_times: number
+    up_limit_desc?: string | null
+    up_limit_time?: string | null
+    fengdan_money?: number | null
+    fengdan_rate?: number | null
+  }>
+}
+
+export interface QuantzzPromotionLevel {
+  level: number
+  total: number
+  advanced: number
+  maintained: number
+  failed: number
+  advancement_rate: number
+  fail_rate: number
+  failed_names: string[]
+}
+
+export interface QuantzzDailyOverview {
+  date: string
+  days: number
+  market: {
+    total_count: number
+    up_count: number
+    down_count: number
+    flat_count: number
+    up_rate: number | null
+    down_rate: number | null
+    avg_change_pct: number | null
+    amount: number | null
+    limit_up_count: number
+    natural_limit_up_count: number | null
+    natural_limit_down_count: number | null
+    seal_success_rate: number | null
+    broken_rate: number | null
+  }
+  emotion_heat: MarketOverviewTrendItem & Record<string, unknown>
+  emotion_trend: Array<MarketOverviewTrendItem & Record<string, unknown>>
+  space_board: QuantzzSpaceBoard
+  popularity: {
+    top20_count: number
+    top20: HotStockRank[]
+    avg_change_pct: number | null
+    up_count: number
+    down_count: number
+    heavy_fall_count: number
+    limit_up_overlap_count: number
+    limit_up_overlap_rate: number | null
+  }
+  hot_boards: {
+    concept: HotBoardRank[]
+    industry: HotBoardRank[]
+  }
+  promotion: {
+    levels: QuantzzPromotionLevel[]
+  }
+  loss_feedback: {
+    limit_down_count: number
+    broken_limit_up_count: number
+    heavy_fall_hot_count: number
+    limit_down: LimitDownItem[]
+    broken_limit_up: BrokenLimitUpItem[]
+  }
+  missing_sources: QuantzzMissingSource[]
 }

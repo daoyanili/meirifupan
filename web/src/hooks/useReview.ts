@@ -4,12 +4,21 @@ import {
   fetchEmotionTrend,
   fetchDates,
   fetchMarketOverviewTrend,
+  fetchQuantzzDaily,
   fetchInsights,
   fetchHot,
   fetchHotDates,
   fetchLatestJob,
 } from '../api/client'
-import type { ReviewData, EmotionTrendItem, MarketInsights, HotData, DataJob, MarketOverviewTrendItem } from '../types'
+import type {
+  ReviewData,
+  EmotionTrendItem,
+  MarketInsights,
+  HotData,
+  DataJob,
+  MarketOverviewTrendItem,
+  QuantzzDailyOverview,
+} from '../types'
 
 export function useReview(date: string) {
   const [data, setData] = useState<ReviewData | null>(null)
@@ -136,4 +145,30 @@ export function useLatestJob() {
     return () => ctrl.abort()
   }, [])
   return job
+}
+
+export function useQuantzzDaily(date: string) {
+  const [data, setData] = useState<QuantzzDailyOverview | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!date) {
+      setData(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
+    const ctrl = new AbortController()
+    setLoading(true)
+    fetchQuantzzDaily(date, 60, ctrl.signal)
+      .then(d => { setData(d); setError(null) })
+      .catch(e => {
+        if (e.name !== 'AbortError') setError(e.message)
+      })
+      .finally(() => setLoading(false))
+    return () => ctrl.abort()
+  }, [date])
+
+  return { data, loading, error }
 }

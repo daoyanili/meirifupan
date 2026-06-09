@@ -1,4 +1,5 @@
 import type { EmotionTrendItem, MarketOverviewTrendItem, ReviewData } from '../types'
+import type { TabKey } from './TabBar'
 import { EmotionCycleChart } from './EmotionCycleChart'
 import { VolumeTrendChart } from './VolumeTrendChart'
 
@@ -6,7 +7,7 @@ interface Props {
   data: ReviewData
   emotionTrend: EmotionTrendItem[]
   marketTrend: MarketOverviewTrendItem[]
-  onOpenTab: (tab: 'limit-up-review' | 'emotion-review' | 'profit-effect' | 'data-overview') => void
+  onOpenTab: (tab: TabKey) => void
 }
 
 function fmtAmount(value: number | null | undefined) {
@@ -124,6 +125,12 @@ export function ReviewHome({ data, emotionTrend, marketTrend, onOpenTab }: Props
       </section>
 
       <section className="home-action-grid">
+        <ActionCard
+          title="量化全景"
+          value={data.emotion.level}
+          text="先看情绪、空间板、人气核心和亏钱反馈是否互相印证。"
+          onClick={() => onOpenTab('quantzz-daily')}
+        />
         <ActionCard
           title="涨停复盘"
           value={`${data.limit_up_stats.total}只`}

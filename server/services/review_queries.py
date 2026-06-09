@@ -788,6 +788,141 @@ def get_emotion_heat_trend(conn: sqlite3.Connection, date: str, days: int = 60) 
     return result
 
 
+def get_quantzz_daily_overview(conn: sqlite3.Connection, date: str, days: int = 60) -> dict[str, Any]:
+    """Return a Quantzz-style daily overview without intraday-only data."""
+    heat_trend = get_emotion_heat_trend(conn, date, days)
+    latest_heat = heat_trend[-1] if heat_trend else {}
+    hot_stocks = get_hot_stocks_rank(conn, date, limit=20)
+    hot_codes = [item["stock_code"] for item in hot_stocks if item.get("stock_code")]
+    overlap_count = 0
+    if hot_codes:
+        placeholders = ",".join("?" for _ in hot_codes)
+        overlap_count = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT stock_code) as total
+            FROM limit_up_events
+            WHERE trade_date = ? AND stock_code IN ({placeholders})
+            """,
+            [date, *hot_codes],
+        ).fetchone()["total"]
+
+    highest_board = latest_heat.get("highest_board") or 0
+    space_board_stocks = latest_heat.get("space_board_stocks") or []
+    concept_boards = get_hot_boards_rank(conn, date, board_type="concept", limit=10)
+    industry_boards = get_hot_boards_rank(conn, date, board_type="industry", limit=10)
+    promotion = get_board_advancement(conn, date)
+
+    market = {
+        "total_count": latest_heat.get("total_count") or 0,
+        "up_count": latest_heat.get("up_count") or 0,
+        "down_count": latest_heat.get("down_count") or 0,
+        "flat_count": latest_heat.get("flat_count") or 0,
+        "up_rate": latest_heat.get("up_rate"),
+        "down_rate": latest_heat.get("down_rate"),
+        "avg_change_pct": latest_heat.get("avg_change_pct"),
+        "amount": latest_heat.get("amount"),
+        "limit_up_count": latest_heat.get("limit_up_count") or 0,
+        "natural_limit_up_count": latest_heat.get("natural_limit_up_count"),
+        "natural_limit_down_count": latest_heat.get("natural_limit_down_count"),
+        "seal_success_rate": latest_heat.get("seal_success_rate"),
+        "broken_rate": latest_heat.get("broken_rate"),
+    }
+
+    limit_down_rows = conn.execute(
+        """
+        SELECT stock_code, stock_name, latest_price, change_pct, limit_down_days,
+               open_count, industry
+        FROM limit_down_events
+        WHERE trade_date = ?
+        ORDER BY change_pct ASC
+        LIMIT 8
+        """,
+        (date,),
+    ).fetchall()
+    broken_rows = conn.execute(
+        """
+        SELECT stock_code, stock_name, latest_price, change_pct, first_limit_up_time,
+               open_count, limit_up_stat, industry
+        FROM broken_limit_up_events
+        WHERE trade_date = ?
+        ORDER BY open_count DESC
+        LIMIT 8
+        """,
+        (date,),
+    ).fetchall()
+    loss_feedback = {
+        "limit_down_count": conn.execute(
+            "SELECT COUNT(*) as total FROM limit_down_events WHERE trade_date = ?",
+            (date,),
+        ).fetchone()["total"],
+        "broken_limit_up_count": conn.execute(
+            "SELECT COUNT(*) as total FROM broken_limit_up_events WHERE trade_date = ?",
+            (date,),
+        ).fetchone()["total"],
+        "heavy_fall_hot_count": latest_heat.get("hot_top20_heavy_fall_count") or 0,
+        "limit_down": _rows_to_list(limit_down_rows),
+        "broken_limit_up": _rows_to_list(broken_rows),
+    }
+
+    missing_sources = [
+        {
+            "key": "auction",
+            "title": "竞价数据",
+            "status": "missing",
+            "reason": "集合竞价属于盘前/分时口径，当前日线库还没有竞价金额、竞价涨幅和竞价委买额。",
+        },
+        {
+            "key": "intraday_heat",
+            "title": "日内情绪热度",
+            "status": "skipped",
+            "reason": "你已经明确不需要分时数据，这部分不进入当前版本。",
+        },
+        {
+            "key": "topic_library",
+            "title": "题材库原文",
+            "status": "missing",
+            "reason": "当前有板块日线和涨停原因，但还没有资讯原文、题材分层和人工题材库。",
+        },
+        {
+            "key": "strategy_trades",
+            "title": "策略交易流水",
+            "status": "missing",
+            "reason": "当前是复盘系统，还没有模拟交易、持仓和资金曲线。",
+        },
+    ]
+
+    return {
+        "date": date,
+        "days": days,
+        "market": market,
+        "emotion_heat": latest_heat,
+        "emotion_trend": heat_trend,
+        "space_board": {
+            "highest_board": highest_board,
+            "stocks": space_board_stocks,
+        },
+        "popularity": {
+            "top20_count": len(hot_stocks),
+            "top20": hot_stocks,
+            "avg_change_pct": latest_heat.get("hot_top20_avg_change_pct"),
+            "up_count": latest_heat.get("hot_top20_up_count") or 0,
+            "down_count": latest_heat.get("hot_top20_down_count") or 0,
+            "heavy_fall_count": latest_heat.get("hot_top20_heavy_fall_count") or 0,
+            "limit_up_overlap_count": overlap_count,
+            "limit_up_overlap_rate": _pct(overlap_count, len(hot_stocks)),
+        },
+        "hot_boards": {
+            "concept": concept_boards,
+            "industry": industry_boards,
+        },
+        "promotion": {
+            "levels": promotion,
+        },
+        "loss_feedback": loss_feedback,
+        "missing_sources": missing_sources,
+    }
+
+
 def get_saved_review(conn: sqlite3.Connection, date: str) -> dict[str, Any] | None:
     """Get the generated structured review if it has been saved."""
     row = conn.execute(

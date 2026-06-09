@@ -23,6 +23,7 @@ from server.services.review_queries import (
     get_limit_up_stats,
     get_market_environment,
     get_market_overview_trend,
+    get_quantzz_daily_overview,
     get_connection,
     get_recent_dates,
     get_saved_review,
@@ -131,6 +132,22 @@ def get_emotion_heat(
             "days": days,
             "trend": get_emotion_heat_trend(conn, date, days),
         }
+    finally:
+        conn.close()
+
+
+@router.get("/api/quantzz/daily")
+def get_quantzz_daily(
+    date: str = Query(..., description="Trade date, e.g. 2026-06-03"),
+    days: int = Query(60, description="Number of trading days to include"),
+):
+    """Return a Quantzz-style daily overview built from daily-level data."""
+    conn = get_connection()
+    try:
+        available = get_dates(conn)
+        if date not in available:
+            raise HTTPException(status_code=404, detail=f"No data for date {date}.")
+        return get_quantzz_daily_overview(conn, date, days)
     finally:
         conn.close()
 

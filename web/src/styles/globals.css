@@ -241,7 +241,7 @@ html, body {
 
 .home-action-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -280,6 +280,262 @@ html, body {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.quantzz-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quantzz-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.quantzz-hero h2 {
+  margin-bottom: 8px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.quantzz-hero p {
+  max-width: 860px;
+  color: var(--text-primary);
+  line-height: 1.75;
+}
+
+.quantzz-hero-metrics,
+.quantzz-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quantzz-hero-metrics {
+  align-content: stretch;
+}
+
+.quantzz-main-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.quantzz-panel,
+.quantzz-mini-panel {
+  min-width: 0;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.quantzz-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.quantzz-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.quantzz-panel-head h3,
+.quantzz-mini-panel h4 {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.quantzz-panel-head span {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quantzz-metric {
+  min-width: 0;
+  padding: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.quantzz-metric span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quantzz-metric strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.quantzz-metric-grid.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.quantzz-note {
+  margin-top: 12px;
+  padding-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.quantzz-stock-list,
+.quantzz-rank-list,
+.quantzz-folds,
+.quantzz-gap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quantzz-stock-row,
+.quantzz-rank-row,
+.quantzz-board-row,
+.quantzz-gap {
+  min-width: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.quantzz-stock-row,
+.quantzz-rank-row,
+.quantzz-board-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.quantzz-stock-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.quantzz-stock-row div,
+.quantzz-rank-row strong,
+.quantzz-board-row strong {
+  min-width: 0;
+}
+
+.quantzz-stock-row strong,
+.quantzz-stock-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quantzz-stock-row span,
+.quantzz-rank-row small,
+.quantzz-board-row small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quantzz-stock-row em,
+.quantzz-rank-row em,
+.quantzz-board-row em {
+  color: var(--text-primary);
+  font-style: normal;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.quantzz-rank-row {
+  grid-template-columns: 42px minmax(0, 1fr) 86px 76px;
+}
+
+.quantzz-rank-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quantzz-rank-row strong,
+.quantzz-board-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quantzz-board-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quantzz-mini-panel h4 {
+  margin-bottom: 10px;
+}
+
+.quantzz-board-row {
+  grid-template-columns: 44px minmax(0, 1fr) 76px minmax(90px, 0.75fr);
+  margin-top: 8px;
+}
+
+.quantzz-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.quantzz-table {
+  min-width: 720px;
+}
+
+.quantzz-empty {
+  padding: 20px;
+  color: var(--text-secondary);
+  text-align: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.quantzz-gap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  padding: 12px;
+}
+
+.quantzz-gap strong {
+  min-width: 0;
+}
+
+.quantzz-gap span {
+  padding: 2px 8px;
+  color: var(--color-yellow);
+  font-size: 12px;
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  border-radius: 999px;
+}
+
+.quantzz-gap p {
+  grid-column: 1 / -1;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 /* 两列网格 */
@@ -1462,6 +1718,16 @@ html, body {
   .home-action-grid {
     grid-template-columns: 1fr;
   }
+  .quantzz-hero,
+  .quantzz-main-grid,
+  .quantzz-board-grid {
+    grid-template-columns: 1fr;
+  }
+  .quantzz-hero-metrics,
+  .quantzz-metric-grid,
+  .quantzz-metric-grid.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .insight-metrics {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1610,6 +1876,47 @@ html, body {
 
   .home-action-card {
     min-height: 112px;
+  }
+
+  .quantzz-hero {
+    padding: 14px;
+  }
+
+  .quantzz-hero h2 {
+    font-size: 22px;
+  }
+
+  .quantzz-hero p {
+    font-size: 13px;
+  }
+
+  .quantzz-panel,
+  .quantzz-mini-panel {
+    padding: 12px;
+  }
+
+  .quantzz-rank-row {
+    grid-template-columns: 36px minmax(0, 1fr) 68px;
+  }
+
+  .quantzz-rank-row small {
+    display: none;
+  }
+
+  .quantzz-board-row {
+    grid-template-columns: 36px minmax(0, 1fr) 70px;
+  }
+
+  .quantzz-board-row small {
+    grid-column: 2 / -1;
+  }
+
+  .quantzz-gap {
+    grid-template-columns: 1fr;
+  }
+
+  .quantzz-gap span {
+    width: fit-content;
   }
 
   .job-status-main {

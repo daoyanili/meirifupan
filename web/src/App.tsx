@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useReview, useDates, useInsights, useHot, useHotDates, useLatestJob } from './hooks/useReview'
+import { useReview, useDates, useInsights, useHot, useHotDates, useLatestJob, useQuantzzDaily } from './hooks/useReview'
 import { DateSelector } from './components/DateSelector'
 import { TabBar, type TabKey } from './components/TabBar'
 import { DataOverview } from './components/DataOverview'
 import { EmotionReview } from './components/EmotionReview'
 import { LimitUpReview } from './components/LimitUpReview'
 import { ProfitEffectReview } from './components/ProfitEffectReview'
+import { QuantzzDailyView } from './components/QuantzzDailyView'
 import { ReviewHome } from './components/ReviewHome'
 import './styles/globals.css'
 
@@ -36,6 +37,11 @@ export default function App() {
   const { data: insights, loading: insightLoading } = useInsights(effectiveDate)
   const hotDate = hotDates.includes(effectiveDate) ? effectiveDate : hotDates[0] ?? ''
   const { data: hotData, loading: hotLoading, error: hotError } = useHot(tab === 'emotion-review' ? hotDate : '')
+  const {
+    data: quantzzDaily,
+    loading: quantzzLoading,
+    error: quantzzError,
+  } = useQuantzzDaily(tab === 'quantzz-daily' ? effectiveDate : '')
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -64,6 +70,9 @@ export default function App() {
       <div className="tab-content">
         {tab === 'review-home' && data && (
           <ReviewHome data={data} emotionTrend={trend} marketTrend={marketTrend} onOpenTab={setTab} />
+        )}
+        {tab === 'quantzz-daily' && (
+          <QuantzzDailyView data={quantzzDaily} loading={quantzzLoading} error={quantzzError} />
         )}
         {tab === 'limit-up-review' && data && <LimitUpReview data={data} />}
         {tab === 'emotion-review' && data && (

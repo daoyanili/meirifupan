@@ -1,4 +1,12 @@
-import type { ReviewData, EmotionTrendItem, MarketInsights, HotData, DataJob, MarketOverviewTrendItem } from '../types'
+import type {
+  ReviewData,
+  EmotionTrendItem,
+  MarketInsights,
+  HotData,
+  DataJob,
+  MarketOverviewTrendItem,
+  QuantzzDailyOverview,
+} from '../types'
 
 const BASE = '/api'
 
@@ -35,6 +43,14 @@ export async function fetchMarketOverviewTrend(date: string, days = 5, signal?: 
   }
   const json = await res.json()
   return json.trend
+}
+
+export async function fetchQuantzzDaily(date: string, days = 60, signal?: AbortSignal): Promise<QuantzzDailyOverview> {
+  const res = await fetch(`${BASE}/quantzz/daily?date=${date}&days=${days}`, { signal })
+  if (!res.ok) {
+    throw new Error(`Failed to fetch quantzz daily: ${res.statusText}`)
+  }
+  return res.json()
 }
 
 export async function fetchInsights(date: string, signal?: AbortSignal): Promise<MarketInsights> {

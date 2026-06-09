@@ -787,6 +787,116 @@ class MarketDbTests(unittest.TestCase):
         self.assertEqual(0.5, trend[0]["hot_top20_avg_change_pct"])
         self.assertEqual(["人气榜一", "人气榜二"], [item["stock_name"] for item in trend[0]["hot_top20"]])
 
+    def test_quantzz_daily_overview_combines_daily_review_modules(self):
+        from db import MarketDB
+        from server.services.review_queries import get_quantzz_daily_overview
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            db.import_uplimit_day({
+                "date": "2026-06-04",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "801001",
+                        "plate_name": "算力",
+                        "plate_score": 80,
+                        "stocks": [
+                            {
+                                "stock_code": "600001",
+                                "stock_name": "晋级样本",
+                                "up_limit_desc": "2连板",
+                                "up_limit_keep_times": 2,
+                            },
+                            {
+                                "stock_code": "600002",
+                                "stock_name": "断板样本",
+                                "up_limit_desc": "2连板",
+                                "up_limit_keep_times": 2,
+                            },
+                        ],
+                    }
+                ],
+                "uplimit_hot": [["算力", "801001", 80]],
+                "plate_rank": [],
+            })
+            db.import_uplimit_day({
+                "date": "2026-06-05",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "801001",
+                        "plate_name": "算力",
+                        "plate_score": 100,
+                        "stocks": [
+                            {
+                                "stock_code": "600001",
+                                "stock_name": "晋级样本",
+                                "up_limit_desc": "3连板",
+                                "up_limit_keep_times": 3,
+                                "up_limit_time": "09:31",
+                                "fengdan_money": 90_000_000,
+                                "fengdan_rate": 2.0,
+                            },
+                            {
+                                "stock_code": "300001",
+                                "stock_name": "首板样本",
+                                "up_limit_desc": "首板",
+                                "up_limit_keep_times": 1,
+                                "up_limit_time": "10:10",
+                                "fengdan_money": 20_000_000,
+                                "fengdan_rate": 0.8,
+                            },
+                        ],
+                    }
+                ],
+                "uplimit_hot": [["算力", "801001", 100]],
+                "plate_rank": [],
+            })
+            db.import_market_breadth("2026-06-05", {
+                "total_count": 5300,
+                "up_count": 2400,
+                "down_count": 2800,
+                "flat_count": 100,
+                "limit_up_count": 2,
+                "limit_down_count": 8,
+                "natural_limit_up_count": 66,
+                "natural_limit_down_count": 12,
+                "avg_change_pct": -0.42,
+                "amount": 1_500_000_000_000,
+            })
+            db.import_limit_down_events("2026-06-05", [
+                {"stock_code": "000001", "stock_name": "跌停样本", "change_pct": -10.0}
+            ])
+            db.import_broken_limit_up_events("2026-06-05", [
+                {"stock_code": "000002", "stock_name": "炸板样本", "change_pct": -3.0}
+            ])
+            db.import_hot_stocks("2026-06-05", [
+                {"rank_no": 1, "stock_code": "600001", "stock_name": "晋级样本", "change_pct": 10.0, "source": "eastmoney_emappdata"},
+                {"rank_no": 2, "stock_code": "000725", "stock_name": "人气趋势", "change_pct": -6.0, "source": "eastmoney_emappdata"},
+                {"rank_no": 1, "stock_code": "300999", "stock_name": "成交额榜", "change_pct": 8.0, "source": "spot_amount_rank"},
+            ])
+            db.import_hot_boards("2026-06-05", [
+                {"rank_no": 1, "board_code": "801001", "board_name": "算力", "change_pct": 3.2, "up_count": 20, "down_count": 8, "leading_stock": "晋级样本"},
+            ], "concept")
+
+            overview = get_quantzz_daily_overview(db.conn, "2026-06-05", days=5)
+            db.close()
+
+        self.assertEqual("2026-06-05", overview["date"])
+        self.assertEqual(3, overview["space_board"]["highest_board"])
+        self.assertEqual("晋级样本", overview["space_board"]["stocks"][0]["stock_name"])
+        self.assertEqual(2, overview["popularity"]["top20_count"])
+        self.assertEqual(["晋级样本", "人气趋势"], [item["stock_name"] for item in overview["popularity"]["top20"]])
+        self.assertEqual(1, overview["popularity"]["limit_up_overlap_count"])
+        self.assertEqual("算力", overview["hot_boards"]["concept"][0]["board_name"])
+        self.assertEqual(2, overview["promotion"]["levels"][0]["total"])
+        self.assertEqual(1, overview["promotion"]["levels"][0]["advanced"])
+        self.assertEqual(1, overview["promotion"]["levels"][0]["failed"])
+        self.assertEqual(1, overview["loss_feedback"]["limit_down_count"])
+        self.assertEqual(1, overview["loss_feedback"]["broken_limit_up_count"])
+        self.assertTrue(any(item["key"] == "auction" for item in overview["missing_sources"]))
+
     def test_import_limit_down_and_broken_boards_deduplicates_by_date_and_code(self):
         from db import MarketDB
 
