@@ -481,6 +481,9 @@ class MarketDbTests(unittest.TestCase):
             "flat_count": 300,
             "limit_up_count": 90,
             "limit_down_count": 11,
+            "natural_limit_up_count": 86,
+            "natural_limit_down_count": 9,
+            "avg_change_pct": -0.37,
             "amount": 1_200_000_000_000,
         }
 
@@ -495,10 +498,51 @@ class MarketDbTests(unittest.TestCase):
 
             conn = sqlite3.connect(db_path)
             row = conn.execute(
-                "select count(*), up_count, amount from market_breadth_daily where trade_date = '2026-06-03'"
+                """
+                select count(*), up_count, amount, natural_limit_up_count,
+                       natural_limit_down_count, avg_change_pct
+                from market_breadth_daily
+                where trade_date = '2026-06-03'
+                """
             ).fetchone()
-            self.assertEqual((1, 3200, 1_500_000_000_000), row)
+            self.assertEqual((1, 3200, 1_500_000_000_000, 86, 9, -0.37), row)
             conn.close()
+
+    def test_import_hot_stocks_keeps_amount_source_and_raw_payload(self):
+        from db import MarketDB
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            self.assertEqual(1, db.import_hot_stocks("2026-06-05", [{
+                "rank_no": 1,
+                "stock_code": "300308",
+                "stock_name": "中际旭创",
+                "latest_price": 179.99,
+                "change_pct": -7.81,
+                "change_amount": -15.26,
+                "amount": 12_300_000_000,
+                "turnover_rate": 6.2,
+                "source": "eastmoney_hot_rank",
+                "raw_payload": {"rank_change": -1},
+            }]))
+            db.close()
+
+            conn = sqlite3.connect(db_path)
+            row = conn.execute(
+                """
+                select amount, turnover_rate, source, raw_payload
+                from hot_stocks
+                where trade_date = '2026-06-05' and stock_code = '300308'
+                """
+            ).fetchone()
+            conn.close()
+
+        self.assertEqual(12_300_000_000, row[0])
+        self.assertEqual(6.2, row[1])
+        self.assertEqual("eastmoney_hot_rank", row[2])
+        self.assertIn('"rank_change": -1', row[3])
 
     def test_market_overview_trend_returns_recent_totals(self):
         from db import MarketDB
@@ -583,6 +627,98 @@ class MarketDbTests(unittest.TestCase):
         self.assertEqual(20.0, trend[1]["amount_change_pct"])
         self.assertFalse(trend[0]["has_limit_up_events"])
         self.assertTrue(trend[-1]["has_limit_up_events"])
+
+    def test_emotion_heat_trend_derived_from_daily_sources(self):
+        from db import MarketDB
+        from server.services.review_queries import get_emotion_heat_trend
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            db.import_uplimit_day({
+                "date": "2026-06-05",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "801001",
+                        "plate_name": "算力",
+                        "stocks": [
+                            {
+                                "stock_code": "300308",
+                                "stock_name": "中际旭创",
+                                "up_limit_desc": "3连板",
+                                "up_limit_keep_times": 3,
+                                "up_limit_time": "09:31",
+                                "fengdan_money": 90_000_000,
+                                "fengdan_rate": 2.5,
+                            },
+                            {
+                                "stock_code": "000725",
+                                "stock_name": "京东方A",
+                                "up_limit_desc": "首板",
+                                "up_limit_keep_times": 1,
+                                "up_limit_time": "10:02",
+                                "fengdan_money": 20_000_000,
+                                "fengdan_rate": 1.2,
+                            },
+                            {
+                                "stock_code": "002222",
+                                "stock_name": "样本科技",
+                                "up_limit_desc": "2连板",
+                                "up_limit_keep_times": 2,
+                                "up_limit_time": "13:14",
+                                "fengdan_money": 10_000_000,
+                                "fengdan_rate": 0.8,
+                            },
+                        ],
+                    }
+                ],
+                "uplimit_hot": [],
+                "plate_rank": [],
+            })
+            db.import_market_breadth("2026-06-05", {
+                "total_count": 5300,
+                "up_count": 2400,
+                "down_count": 2800,
+                "flat_count": 100,
+                "limit_up_count": 3,
+                "limit_down_count": 1,
+                "natural_limit_up_count": 55,
+                "natural_limit_down_count": 10,
+                "avg_change_pct": -0.37,
+                "amount": 1_200_000_000_000,
+            })
+            db.import_limit_down_events("2026-06-05", [
+                {"stock_code": "600001", "stock_name": "跌停样本", "change_pct": -10.0}
+            ])
+            db.import_broken_limit_up_events("2026-06-05", [
+                {"stock_code": "600696", "stock_name": "炸板样本", "open_count": 2}
+            ])
+            db.import_hot_stocks("2026-06-05", [
+                {"rank_no": 1, "stock_code": "300308", "stock_name": "中际旭创", "change_pct": 10.0},
+                {"rank_no": 2, "stock_code": "000725", "stock_name": "京东方A", "change_pct": -1.0},
+                {"rank_no": 3, "stock_code": "300001", "stock_name": "非涨停强股", "change_pct": 4.0},
+                {"rank_no": 4, "stock_code": "600001", "stock_name": "跌停样本", "change_pct": -6.0},
+            ])
+
+            trend = get_emotion_heat_trend(db.conn, "2026-06-05", days=1)
+            db.close()
+
+        self.assertEqual(1, len(trend))
+        item = trend[0]
+        self.assertEqual("2026-06-05", item["date"])
+        self.assertEqual(-0.37, item["avg_change_pct"])
+        self.assertEqual(55, item["natural_limit_up_count"])
+        self.assertEqual(75.0, item["seal_success_rate"])
+        self.assertEqual(25.0, item["broken_rate"])
+        self.assertEqual(1.75, item["hot_top20_avg_change_pct"])
+        self.assertEqual(2, item["hot_top20_up_count"])
+        self.assertEqual(2, item["hot_top20_down_count"])
+        self.assertEqual(1, item["hot_top20_heavy_fall_count"])
+        self.assertEqual(2, item["hot_limit_up_overlap_count"])
+        self.assertEqual(50.0, item["hot_limit_up_overlap_rate"])
+        self.assertEqual(3, item["highest_board"])
+        self.assertEqual("中际旭创", item["space_board_stocks"][0]["stock_name"])
 
     def test_import_limit_down_and_broken_boards_deduplicates_by_date_and_code(self):
         from db import MarketDB

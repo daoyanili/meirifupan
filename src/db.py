@@ -249,6 +249,9 @@ class MarketDB:
                 flat_count integer,
                 limit_up_count integer,
                 limit_down_count integer,
+                natural_limit_up_count integer,
+                natural_limit_down_count integer,
+                avg_change_pct real,
                 amount real,
                 raw_payload text,
                 created_at text not null default current_timestamp,
@@ -411,6 +414,10 @@ class MarketDB:
                 latest_price real,
                 change_pct real,
                 change_amount real,
+                amount real,
+                turnover_rate real,
+                source text,
+                raw_payload text,
                 created_at text not null default current_timestamp,
                 updated_at text not null default current_timestamp,
                 primary key(trade_date, stock_code)
@@ -444,39 +451,54 @@ class MarketDB:
         )
         self._ensure_daily_review_columns()
         self._ensure_data_job_columns()
+        self._ensure_market_breadth_columns()
+        self._ensure_hot_stock_columns()
         self.conn.commit()
+
+    def _ensure_table_columns(self, table_name: str, columns: dict[str, str]) -> None:
+        existing = {
+            row["name"]
+            for row in self.conn.execute(f"pragma table_info({table_name})").fetchall()
+        }
+        for name, column_type in columns.items():
+            if name not in existing:
+                self.conn.execute(f"alter table {table_name} add column {name} {column_type}")
 
     def _ensure_daily_review_columns(self) -> None:
         """Add new report columns when upgrading an existing database."""
-        existing = {
-            row["name"]
-            for row in self.conn.execute("pragma table_info(daily_reviews)").fetchall()
-        }
-        columns = {
+        self._ensure_table_columns("daily_reviews", {
             "risk_flags": "text",
             "opportunities": "text",
             "next_plan": "text",
             "markdown_path": "text",
             "raw_payload": "text",
-        }
-        for name, column_type in columns.items():
-            if name not in existing:
-                self.conn.execute(f"alter table daily_reviews add column {name} {column_type}")
+        })
 
     def _ensure_data_job_columns(self) -> None:
         """Add job tracking columns when upgrading an existing database."""
-        existing = {
-            row["name"]
-            for row in self.conn.execute("pragma table_info(data_jobs)").fetchall()
-        }
-        columns = {
+        self._ensure_table_columns("data_jobs", {
             "details": "text",
             "started_at": "text",
             "finished_at": "text",
-        }
-        for name, column_type in columns.items():
-            if name not in existing:
-                self.conn.execute(f"alter table data_jobs add column {name} {column_type}")
+        })
+
+    def _ensure_market_breadth_columns(self) -> None:
+        """Add breadth metrics needed by review-home trend charts."""
+        self._ensure_table_columns("market_breadth_daily", {
+            "natural_limit_up_count": "integer",
+            "natural_limit_down_count": "integer",
+            "avg_change_pct": "real",
+        })
+
+    def _ensure_hot_stock_columns(self) -> None:
+        """Add richer hot-rank fields for popularity emotion analysis."""
+        self._ensure_table_columns("hot_stocks", {
+            "amount": "real",
+            "turnover_rate": "real",
+            "source": "text",
+            "raw_payload": "text",
+        })
+
 
     def import_uplimit_day(self, day_data: dict[str, Any], raw_source: str = "json") -> None:
         trade_date = day_data["date"]
@@ -798,9 +820,10 @@ class MarketDB:
             """
             insert into market_breadth_daily(
                 trade_date, total_count, up_count, down_count, flat_count,
-                limit_up_count, limit_down_count, amount, raw_payload
+                limit_up_count, limit_down_count, natural_limit_up_count,
+                natural_limit_down_count, avg_change_pct, amount, raw_payload
             )
-            values(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict(trade_date) do update set
                 total_count = coalesce(excluded.total_count, market_breadth_daily.total_count),
                 up_count = coalesce(excluded.up_count, market_breadth_daily.up_count),
@@ -808,6 +831,9 @@ class MarketDB:
                 flat_count = coalesce(excluded.flat_count, market_breadth_daily.flat_count),
                 limit_up_count = coalesce(excluded.limit_up_count, market_breadth_daily.limit_up_count),
                 limit_down_count = coalesce(excluded.limit_down_count, market_breadth_daily.limit_down_count),
+                natural_limit_up_count = coalesce(excluded.natural_limit_up_count, market_breadth_daily.natural_limit_up_count),
+                natural_limit_down_count = coalesce(excluded.natural_limit_down_count, market_breadth_daily.natural_limit_down_count),
+                avg_change_pct = coalesce(excluded.avg_change_pct, market_breadth_daily.avg_change_pct),
                 amount = coalesce(excluded.amount, market_breadth_daily.amount),
                 raw_payload = excluded.raw_payload,
                 updated_at = current_timestamp
@@ -820,6 +846,9 @@ class MarketDB:
                 snapshot.get("flat_count"),
                 snapshot.get("limit_up_count"),
                 snapshot.get("limit_down_count"),
+                snapshot.get("natural_limit_up_count"),
+                snapshot.get("natural_limit_down_count"),
+                snapshot.get("avg_change_pct"),
                 snapshot.get("amount"),
                 _json_text(snapshot),
             ),
@@ -1157,18 +1186,26 @@ class MarketDB:
             self._upsert_stock(stock_code, r.get("stock_name"))
             self.conn.execute(
                 """
-                insert into hot_stocks(trade_date, rank_no, stock_code, stock_name, latest_price, change_pct, change_amount)
-                values(?, ?, ?, ?, ?, ?, ?)
+                insert into hot_stocks(
+                    trade_date, rank_no, stock_code, stock_name, latest_price,
+                    change_pct, change_amount, amount, turnover_rate, source, raw_payload
+                )
+                values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict(trade_date, stock_code) do update set
                     rank_no = excluded.rank_no,
                     stock_name = excluded.stock_name,
                     latest_price = excluded.latest_price,
                     change_pct = excluded.change_pct,
                     change_amount = excluded.change_amount,
+                    amount = coalesce(excluded.amount, hot_stocks.amount),
+                    turnover_rate = coalesce(excluded.turnover_rate, hot_stocks.turnover_rate),
+                    source = coalesce(excluded.source, hot_stocks.source),
+                    raw_payload = coalesce(excluded.raw_payload, hot_stocks.raw_payload),
                     updated_at = current_timestamp
                 """,
                 (trade_date, r["rank_no"], stock_code, r.get("stock_name"),
-                 r.get("latest_price"), r.get("change_pct"), r.get("change_amount")),
+                 r.get("latest_price"), r.get("change_pct"), r.get("change_amount"),
+                 r.get("amount"), r.get("turnover_rate"), r.get("source"), _json_text(r.get("raw_payload") or r)),
             )
             count += 1
         self.conn.commit()

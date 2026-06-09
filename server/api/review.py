@@ -11,6 +11,7 @@ from server.services.review_queries import (
     get_board_tiers,
     get_capital_flow,
     get_dates,
+    get_emotion_heat_trend,
     get_high_stocks,
     get_hot_boards_rank,
     get_hot_plates,
@@ -112,6 +113,23 @@ def get_emotion_trend(
             "date": date,
             "days": days,
             "trend": trend,
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/api/emotion/heat-trend")
+def get_emotion_heat(
+    date: str = Query(..., description="End date, e.g. 2026-06-03"),
+    days: int = Query(60, description="Number of trading days to include"),
+):
+    """Return daily heat metrics for sentiment, hot stocks and space-board review."""
+    conn = get_connection()
+    try:
+        return {
+            "date": date,
+            "days": days,
+            "trend": get_emotion_heat_trend(conn, date, days),
         }
     finally:
         conn.close()

@@ -67,6 +67,10 @@ def _fetch_hot_stocks_direct() -> list[dict]:
             "latest_price": None,
             "change_pct": None,
             "change_amount": None,
+            "amount": None,
+            "turnover_rate": None,
+            "source": "eastmoney_emappdata",
+            "raw_payload": item,
         })
     return records
 
@@ -106,6 +110,8 @@ def _enrich_stocks_from_spot(records: list[dict]) -> list[dict]:
                 "latest_price": row.get("最新价"),
                 "change_pct": row.get("涨跌幅"),
                 "change_amount": row.get("涨跌额"),
+                "amount": row.get("成交额"),
+                "turnover_rate": row.get("换手率"),
             }
         for r in records:
             code = r["stock_code"]
@@ -119,6 +125,10 @@ def _enrich_stocks_from_spot(records: list[dict]) -> list[dict]:
                     r["change_pct"] = s["change_pct"]
                 if r.get("change_amount") is None:
                     r["change_amount"] = s["change_amount"]
+                if r.get("amount") is None:
+                    r["amount"] = s["amount"]
+                if r.get("turnover_rate") is None:
+                    r["turnover_rate"] = s["turnover_rate"]
     except Exception as e:
         print(f"  ⚠️  实时行情补充失败: {e}")
     return records
@@ -145,6 +155,10 @@ def fetch_hot_stocks(db: MarketDB, trade_date: str | None = None) -> int:
                     "latest_price": row.get("最新价"),
                     "change_pct": row.get("涨跌幅"),
                     "change_amount": row.get("涨跌额"),
+                    "amount": row.get("成交额"),
+                    "turnover_rate": row.get("换手率"),
+                    "source": "akshare.stock_hot_rank_em",
+                    "raw_payload": dict(row),
                 })
             count = db.import_hot_stocks(target_date, records)
             print(f"  ✅ 写入 {count} 条热门股票（含行情）")

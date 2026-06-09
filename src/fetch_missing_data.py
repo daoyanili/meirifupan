@@ -138,14 +138,18 @@ def import_market_breadth_and_hot_stocks(db: MarketDB, trade_date: str, spot_df:
 
     change = spot_df["涨跌幅"].apply(_num)
     amount = spot_df["成交额"].apply(_num)
+    valid_change = change.dropna()
     snapshot = {
         "trade_date": trade_date,
-        "total_count": int(change.notna().sum()),
+        "total_count": int(valid_change.count()),
         "up_count": int((change > 0).sum()),
         "down_count": int((change < 0).sum()),
         "flat_count": int((change == 0).sum()),
         "limit_up_count": int((change >= 9.8).sum()),
         "limit_down_count": int((change <= -9.8).sum()),
+        "natural_limit_up_count": int((change >= 9.8).sum()),
+        "natural_limit_down_count": int((change <= -9.8).sum()),
+        "avg_change_pct": round(float(valid_change.mean()), 2) if not valid_change.empty else None,
         "amount": float(amount.dropna().sum()),
         "source": "akshare.stock_zh_a_spot",
     }
@@ -164,7 +168,9 @@ def import_market_breadth_and_hot_stocks(db: MarketDB, trade_date: str, spot_df:
             "change_pct": _num(row.get("涨跌幅")),
             "change_amount": _num(row.get("涨跌额")),
             "amount": _num(row.get("成交额")),
+            "turnover_rate": _num(row.get("换手率")),
             "source": "spot_amount_rank",
+            "raw_payload": row,
         })
     hot_count = db.import_hot_stocks(trade_date, hot_records)
     return breadth_count, hot_count

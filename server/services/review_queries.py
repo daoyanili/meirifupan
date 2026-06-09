@@ -68,6 +68,21 @@ def _json_dict(value: str | None) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _round_or_none(value: Any, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    try:
+        return round(float(value), digits)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pct(part: int | float | None, total: int | float | None, digits: int = 1) -> float | None:
+    if not total:
+        return None
+    return _round_or_none((part or 0) / total * 100, digits)
+
+
 def _compact_job_details(details: dict[str, Any]) -> dict[str, Any]:
     """Return concise job details for the UI."""
     compact = {
@@ -415,7 +430,8 @@ def get_market_environment(conn: sqlite3.Connection, date: str) -> dict[str, Any
     breadth_row = conn.execute(
         """
         SELECT total_count, up_count, down_count, flat_count,
-               limit_up_count, limit_down_count, amount
+               limit_up_count, limit_down_count, natural_limit_up_count,
+               natural_limit_down_count, avg_change_pct, amount
         FROM market_breadth_daily
         WHERE trade_date = ?
         """,
@@ -428,6 +444,9 @@ def get_market_environment(conn: sqlite3.Connection, date: str) -> dict[str, Any
         "flat_count": 0,
         "limit_up_count": 0,
         "limit_down_count": 0,
+        "natural_limit_up_count": 0,
+        "natural_limit_down_count": 0,
+        "avg_change_pct": None,
         "amount": 0,
     }
     total = breadth.get("total_count") or 0
@@ -543,7 +562,8 @@ def get_market_overview_trend(conn: sqlite3.Connection, date: str, days: int = 5
         breadth_row = conn.execute(
             """
             SELECT total_count, up_count, down_count, flat_count,
-                   limit_up_count, limit_down_count, amount
+                   limit_up_count, limit_down_count, natural_limit_up_count,
+                   natural_limit_down_count, avg_change_pct, amount
             FROM market_breadth_daily
             WHERE trade_date = ?
             """,
@@ -590,11 +610,162 @@ def get_market_overview_trend(conn: sqlite3.Connection, date: str, days: int = 5
             "down_count": down_count,
             "flat_count": flat_count,
             "up_rate": up_rate,
+            "natural_limit_up_count": breadth.get("natural_limit_up_count"),
+            "natural_limit_down_count": breadth.get("natural_limit_down_count"),
+            "avg_change_pct": breadth.get("avg_change_pct"),
             "limit_up_count": limit_up_count,
             "has_limit_up_events": event_limit_up_count > 0,
             "limit_down_count": limit_down_count,
             "broken_limit_up_count": broken_limit_up_count,
             "highest_board": highest_board,
+        })
+
+    return result
+
+
+def get_emotion_heat_trend(conn: sqlite3.Connection, date: str, days: int = 60) -> list[dict[str, Any]]:
+    """Return daily sources needed for sentiment heat, hot-stock emotion and space-board review."""
+    rows = conn.execute(
+        """
+        SELECT trade_date
+        FROM (
+            SELECT DISTINCT trade_date FROM limit_up_events WHERE trade_date <= ?
+            UNION
+            SELECT DISTINCT trade_date FROM market_breadth_daily WHERE trade_date <= ?
+            UNION
+            SELECT DISTINCT trade_date FROM hot_stocks WHERE trade_date <= ?
+        )
+        ORDER BY trade_date DESC
+        LIMIT ?
+        """,
+        (date, date, date, days),
+    ).fetchall()
+    recent_dates = [row["trade_date"] for row in rows]
+    result: list[dict[str, Any]] = []
+
+    for trade_date in sorted(recent_dates):
+        breadth_row = conn.execute(
+            """
+            SELECT total_count, up_count, down_count, flat_count,
+                   limit_up_count, limit_down_count, natural_limit_up_count,
+                   natural_limit_down_count, avg_change_pct, amount
+            FROM market_breadth_daily
+            WHERE trade_date = ?
+            """,
+            (trade_date,),
+        ).fetchone()
+        breadth = _row_to_dict(breadth_row) if breadth_row else {}
+
+        limit_up_stats = get_limit_up_stats(conn, trade_date)
+        event_limit_up_count = limit_up_stats.get("total") or 0
+        limit_up_count = event_limit_up_count or breadth.get("limit_up_count") or 0
+        highest_board = (limit_up_stats.get("highest_board") or 0) if event_limit_up_count else 0
+
+        limit_down_total = conn.execute(
+            "SELECT COUNT(*) as total FROM limit_down_events WHERE trade_date = ?",
+            (trade_date,),
+        ).fetchone()["total"]
+        limit_down_count = breadth.get("limit_down_count") or limit_down_total or 0
+
+        broken_limit_up_count = conn.execute(
+            "SELECT COUNT(*) as total FROM broken_limit_up_events WHERE trade_date = ?",
+            (trade_date,),
+        ).fetchone()["total"]
+
+        seal_denominator = limit_up_count + broken_limit_up_count
+        seal_success_rate = _pct(limit_up_count, seal_denominator)
+        broken_rate = _pct(broken_limit_up_count, seal_denominator)
+
+        seal_row = conn.execute(
+            """
+            SELECT AVG(fengdan_money) as avg_fengdan_money,
+                   AVG(fengdan_rate) as avg_fengdan_rate
+            FROM limit_up_events
+            WHERE trade_date = ?
+            """,
+            (trade_date,),
+        ).fetchone()
+
+        space_rows = []
+        if highest_board:
+            space_rows = conn.execute(
+                """
+                SELECT stock_code, stock_name, up_limit_keep_times, up_limit_desc,
+                       up_limit_time, fengdan_money, fengdan_rate
+                FROM limit_up_events
+                WHERE trade_date = ? AND up_limit_keep_times = ?
+                ORDER BY COALESCE(fengdan_money, 0) DESC, up_limit_time ASC
+                """,
+                (trade_date, highest_board),
+            ).fetchall()
+
+        hot_rows = conn.execute(
+            """
+            SELECT rank_no, stock_code, stock_name, latest_price, change_pct,
+                   change_amount, amount, turnover_rate, source
+            FROM hot_stocks
+            WHERE trade_date = ? AND rank_no <= 20
+            ORDER BY rank_no
+            """,
+            (trade_date,),
+        ).fetchall()
+        hot_items = _rows_to_list(hot_rows)
+        hot_changes = [
+            float(item["change_pct"])
+            for item in hot_items
+            if item.get("change_pct") is not None
+        ]
+        hot_codes = [item["stock_code"] for item in hot_items if item.get("stock_code")]
+        hot_limit_up_overlap_count = 0
+        if hot_codes:
+            placeholders = ",".join("?" for _ in hot_codes)
+            hot_limit_up_overlap_count = conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT stock_code) as total
+                FROM limit_up_events
+                WHERE trade_date = ? AND stock_code IN ({placeholders})
+                """,
+                [trade_date, *hot_codes],
+            ).fetchone()["total"]
+
+        total_count = breadth.get("total_count") or 0
+        up_count = breadth.get("up_count") or 0
+        down_count = breadth.get("down_count") or 0
+
+        result.append({
+            "date": trade_date,
+            "has_market_breadth": bool(breadth_row),
+            "has_hot_stocks": bool(hot_items),
+            "has_limit_down_events": limit_down_total > 0,
+            "has_broken_limit_up_events": broken_limit_up_count > 0,
+            "total_count": total_count,
+            "up_count": up_count,
+            "down_count": down_count,
+            "flat_count": breadth.get("flat_count") or 0,
+            "up_rate": _pct(up_count, total_count),
+            "down_rate": _pct(down_count, total_count),
+            "avg_change_pct": breadth.get("avg_change_pct"),
+            "amount": breadth.get("amount"),
+            "limit_up_count": limit_up_count,
+            "limit_up_event_count": event_limit_up_count,
+            "natural_limit_up_count": breadth.get("natural_limit_up_count"),
+            "limit_down_count": limit_down_count,
+            "natural_limit_down_count": breadth.get("natural_limit_down_count"),
+            "broken_limit_up_count": broken_limit_up_count,
+            "seal_success_rate": seal_success_rate,
+            "broken_rate": broken_rate,
+            "avg_fengdan_money": _round_or_none(seal_row["avg_fengdan_money"] if seal_row else None, 0),
+            "avg_fengdan_rate": _round_or_none(seal_row["avg_fengdan_rate"] if seal_row else None, 2),
+            "highest_board": highest_board,
+            "space_board_stocks": _rows_to_list(space_rows),
+            "hot_top20_count": len(hot_items),
+            "hot_top20_avg_change_pct": _round_or_none(sum(hot_changes) / len(hot_changes), 2) if hot_changes else None,
+            "hot_top20_up_count": sum(1 for value in hot_changes if value > 0),
+            "hot_top20_down_count": sum(1 for value in hot_changes if value < 0),
+            "hot_top20_heavy_fall_count": sum(1 for value in hot_changes if value <= -5),
+            "hot_limit_up_overlap_count": hot_limit_up_overlap_count,
+            "hot_limit_up_overlap_rate": _pct(hot_limit_up_overlap_count, len(hot_items)),
+            "hot_top20": hot_items,
         })
 
     return result
@@ -835,7 +1006,8 @@ def get_hot_stocks_rank(conn: sqlite3.Connection, date: str, limit: int = 30) ->
     """Get hot stock rankings from hot_stocks table."""
     rows = conn.execute(
         """
-        SELECT rank_no, stock_code, stock_name, latest_price, change_pct, change_amount
+        SELECT rank_no, stock_code, stock_name, latest_price, change_pct,
+               change_amount, amount, turnover_rate, source
         FROM hot_stocks
         WHERE trade_date = ?
         ORDER BY rank_no
