@@ -1,4 +1,4 @@
-export type TabKey = 'review-home' | 'quantzz-daily' | 'limit-up-review' | 'emotion-review' | 'profit-effect' | 'data-overview'
+export type TabKey = 'review-home' | 'premarket-guide' | 'quantzz-daily' | 'limit-up-review' | 'emotion-review' | 'profit-effect' | 'data-overview'
 
 interface Props {
   active: TabKey
@@ -7,6 +7,7 @@ interface Props {
 
 const tabs: { key: TabKey; label: string }[] = [
   { key: 'review-home', label: '复盘首页' },
+  { key: 'premarket-guide', label: '盘前指引' },
   { key: 'quantzz-daily', label: '量化全景' },
   { key: 'limit-up-review', label: '涨停复盘' },
   { key: 'emotion-review', label: '情绪复盘' },

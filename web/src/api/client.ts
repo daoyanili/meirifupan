@@ -5,6 +5,7 @@ import type {
   HotData,
   DataJob,
   MarketOverviewTrendItem,
+  PremarketGuide,
   QuantzzDailyOverview,
 } from '../types'
 
@@ -49,6 +50,15 @@ export async function fetchQuantzzDaily(date: string, days = 60, signal?: AbortS
   const res = await fetch(`${BASE}/quantzz/daily?date=${date}&days=${days}`, { signal })
   if (!res.ok) {
     throw new Error(`Failed to fetch quantzz daily: ${res.statusText}`)
+  }
+  return res.json()
+}
+
+export async function fetchPremarketGuide(date?: string, signal?: AbortSignal): Promise<PremarketGuide> {
+  const query = date ? `?date=${date}` : ''
+  const res = await fetch(`${BASE}/premarket${query}`, { signal })
+  if (!res.ok) {
+    throw new Error(`Failed to fetch premarket guide: ${res.statusText}`)
   }
   return res.json()
 }

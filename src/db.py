@@ -381,6 +381,62 @@ class MarketDB:
                 created_at text not null default current_timestamp
             );
 
+            create table if not exists premarket_news (
+                guide_date text not null,
+                source text not null,
+                published_at text,
+                title text not null,
+                content text,
+                url text,
+                raw_payload text,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(guide_date, source, title)
+            );
+
+            create table if not exists stock_announcements (
+                notice_date text not null,
+                stock_code text,
+                stock_name text,
+                notice_type text,
+                title text not null,
+                url text,
+                raw_payload text,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(notice_date, title)
+            );
+
+            create table if not exists us_stock_quotes (
+                quote_date text not null,
+                symbol text not null,
+                stock_name text,
+                sector text,
+                latest_price real,
+                change_pct real,
+                change_amount real,
+                raw_payload text,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp,
+                primary key(quote_date, symbol)
+            );
+
+            create table if not exists premarket_guides (
+                guide_date text primary key,
+                review_date text,
+                headline text,
+                market_tone text,
+                focus_plates text,
+                watch_points text,
+                risk_points text,
+                catalyst_news text,
+                announcements text,
+                us_markets text,
+                raw_payload text,
+                created_at text not null default current_timestamp,
+                updated_at text not null default current_timestamp
+            );
+
             create index if not exists idx_limit_up_events_date_time
                 on limit_up_events(trade_date, up_limit_time);
             create index if not exists idx_limit_up_plate_map_date_plate
@@ -405,6 +461,12 @@ class MarketDB:
                 on limit_down_events(trade_date);
             create index if not exists idx_broken_limit_up_events_date
                 on broken_limit_up_events(trade_date);
+            create index if not exists idx_premarket_news_date
+                on premarket_news(guide_date, published_at);
+            create index if not exists idx_stock_announcements_date
+                on stock_announcements(notice_date);
+            create index if not exists idx_us_stock_quotes_date
+                on us_stock_quotes(quote_date, change_pct);
 
             create table if not exists hot_stocks (
                 trade_date text not null,
@@ -453,6 +515,7 @@ class MarketDB:
         self._ensure_data_job_columns()
         self._ensure_market_breadth_columns()
         self._ensure_hot_stock_columns()
+        self._ensure_premarket_columns()
         self.conn.commit()
 
     def _ensure_table_columns(self, table_name: str, columns: dict[str, str]) -> None:
@@ -496,6 +559,21 @@ class MarketDB:
             "amount": "real",
             "turnover_rate": "real",
             "source": "text",
+            "raw_payload": "text",
+        })
+
+    def _ensure_premarket_columns(self) -> None:
+        """Add columns for pre-market guide data when upgrading old databases."""
+        self._ensure_table_columns("premarket_guides", {
+            "review_date": "text",
+            "headline": "text",
+            "market_tone": "text",
+            "focus_plates": "text",
+            "watch_points": "text",
+            "risk_points": "text",
+            "catalyst_news": "text",
+            "announcements": "text",
+            "us_markets": "text",
             "raw_payload": "text",
         })
 
@@ -1249,6 +1327,161 @@ class MarketDB:
             count += 1
         self.conn.commit()
         return count
+
+    def import_premarket_news(self, guide_date: str, records: list[dict[str, Any]]) -> int:
+        """导入盘前新闻。"""
+        count = 0
+        for r in records:
+            title = str(r.get("title") or "").strip()
+            source = str(r.get("source") or "news").strip()
+            if not title:
+                continue
+            self.conn.execute(
+                """
+                insert into premarket_news(
+                    guide_date, source, published_at, title, content, url, raw_payload
+                )
+                values(?, ?, ?, ?, ?, ?, ?)
+                on conflict(guide_date, source, title) do update set
+                    published_at = excluded.published_at,
+                    content = excluded.content,
+                    url = excluded.url,
+                    raw_payload = excluded.raw_payload,
+                    updated_at = current_timestamp
+                """,
+                (
+                    guide_date,
+                    source,
+                    r.get("published_at"),
+                    title,
+                    r.get("content"),
+                    r.get("url"),
+                    _json_text(r.get("raw_payload") or r),
+                ),
+            )
+            count += 1
+        self.conn.commit()
+        return count
+
+    def import_stock_announcements(self, notice_date: str, records: list[dict[str, Any]]) -> int:
+        """导入上市公司公告。"""
+        count = 0
+        for r in records:
+            title = str(r.get("title") or "").strip()
+            if not title:
+                continue
+            stock_code = str(r.get("stock_code") or "").strip()
+            stock_name = r.get("stock_name")
+            if stock_code:
+                self._upsert_stock(stock_code, stock_name)
+            self.conn.execute(
+                """
+                insert into stock_announcements(
+                    notice_date, stock_code, stock_name, notice_type, title, url, raw_payload
+                )
+                values(?, ?, ?, ?, ?, ?, ?)
+                on conflict(notice_date, title) do update set
+                    stock_code = excluded.stock_code,
+                    stock_name = excluded.stock_name,
+                    notice_type = excluded.notice_type,
+                    url = excluded.url,
+                    raw_payload = excluded.raw_payload,
+                    updated_at = current_timestamp
+                """,
+                (
+                    notice_date,
+                    stock_code or None,
+                    stock_name,
+                    r.get("notice_type"),
+                    title,
+                    r.get("url"),
+                    _json_text(r.get("raw_payload") or r),
+                ),
+            )
+            count += 1
+        self.conn.commit()
+        return count
+
+    def import_us_stock_quotes(self, quote_date: str, records: list[dict[str, Any]]) -> int:
+        """导入隔夜美股核心个股行情。"""
+        count = 0
+        for r in records:
+            symbol = str(r.get("symbol") or "").strip().upper()
+            if not symbol:
+                continue
+            self.conn.execute(
+                """
+                insert into us_stock_quotes(
+                    quote_date, symbol, stock_name, sector, latest_price,
+                    change_pct, change_amount, raw_payload
+                )
+                values(?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(quote_date, symbol) do update set
+                    stock_name = excluded.stock_name,
+                    sector = excluded.sector,
+                    latest_price = excluded.latest_price,
+                    change_pct = excluded.change_pct,
+                    change_amount = excluded.change_amount,
+                    raw_payload = excluded.raw_payload,
+                    updated_at = current_timestamp
+                """,
+                (
+                    quote_date,
+                    symbol,
+                    r.get("stock_name"),
+                    r.get("sector"),
+                    r.get("latest_price"),
+                    r.get("change_pct"),
+                    r.get("change_amount"),
+                    _json_text(r.get("raw_payload") or r),
+                ),
+            )
+            count += 1
+        self.conn.commit()
+        return count
+
+    def import_premarket_guide(self, guide: dict[str, Any]) -> int:
+        """导入生成后的盘前指引。"""
+        guide_date = str(guide.get("guide_date") or "")
+        if not guide_date:
+            return 0
+        self.conn.execute(
+            """
+            insert into premarket_guides(
+                guide_date, review_date, headline, market_tone, focus_plates,
+                watch_points, risk_points, catalyst_news, announcements,
+                us_markets, raw_payload
+            )
+            values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            on conflict(guide_date) do update set
+                review_date = excluded.review_date,
+                headline = excluded.headline,
+                market_tone = excluded.market_tone,
+                focus_plates = excluded.focus_plates,
+                watch_points = excluded.watch_points,
+                risk_points = excluded.risk_points,
+                catalyst_news = excluded.catalyst_news,
+                announcements = excluded.announcements,
+                us_markets = excluded.us_markets,
+                raw_payload = excluded.raw_payload,
+                updated_at = current_timestamp
+            """,
+            (
+                guide_date,
+                guide.get("review_date"),
+                guide.get("headline"),
+                guide.get("market_tone"),
+                _json_text(guide.get("focus_plates") or []),
+                _json_text(guide.get("watch_points") or []),
+                _json_text(guide.get("risk_points") or []),
+                _json_text(guide.get("catalyst_news") or []),
+                _json_text(guide.get("announcements") or []),
+                _json_text(guide.get("us_markets") or []),
+                _json_text(guide),
+            ),
+        )
+        self.conn.commit()
+        return 1
 
     def import_plate_trends(self, records: list[dict[str, Any]]) -> int:
         """导入本地派生的板块强度趋势。"""

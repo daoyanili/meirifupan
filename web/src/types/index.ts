@@ -519,3 +519,67 @@ export interface QuantzzDailyOverview {
   }
   missing_sources: QuantzzMissingSource[]
 }
+
+export interface PremarketFocusPlate {
+  board_code?: string | null
+  board_name?: string | null
+  plate_code?: string | null
+  plate_name?: string | null
+  rank_no?: number | null
+  change_pct?: number | null
+  up_count?: number | null
+  down_count?: number | null
+  leading_stock?: string | null
+  limit_up_count?: number | null
+  reason?: string | null
+}
+
+export interface PremarketWatchPoint {
+  title: string
+  reason: string
+  trigger?: string | null
+}
+
+export interface PremarketNewsItem {
+  source: string
+  published_at?: string | null
+  title: string
+  content?: string | null
+  url?: string | null
+}
+
+export interface PremarketAnnouncement {
+  stock_code?: string | null
+  stock_name?: string | null
+  notice_date?: string | null
+  notice_type?: string | null
+  title: string
+  url?: string | null
+}
+
+export interface PremarketUsMarket {
+  symbol: string
+  stock_name?: string | null
+  sector?: string | null
+  latest_price?: number | null
+  change_pct?: number | null
+  change_amount?: number | null
+  mapped_theme?: string | null
+}
+
+export interface PremarketGuide {
+  guide_date: string
+  review_date: string
+  generated_at?: string | null
+  headline: string
+  market_tone: string
+  market_snapshot: Record<string, number | string | null>
+  focus_plates: PremarketFocusPlate[]
+  hot_stocks: HotStockRank[]
+  space_stocks: QuantzzSpaceBoard['stocks']
+  watch_points: PremarketWatchPoint[]
+  risk_points: PremarketWatchPoint[]
+  catalyst_news: PremarketNewsItem[]
+  announcements: PremarketAnnouncement[]
+  us_markets: PremarketUsMarket[]
+}

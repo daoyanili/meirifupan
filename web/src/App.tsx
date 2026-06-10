@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useReview, useDates, useInsights, useHot, useHotDates, useLatestJob, useQuantzzDaily } from './hooks/useReview'
+import { useReview, useDates, useInsights, useHot, useHotDates, useLatestJob, usePremarketGuide, useQuantzzDaily } from './hooks/useReview'
 import { DateSelector } from './components/DateSelector'
 import { TabBar, type TabKey } from './components/TabBar'
 import { DataOverview } from './components/DataOverview'
 import { EmotionReview } from './components/EmotionReview'
 import { LimitUpReview } from './components/LimitUpReview'
+import { PremarketGuideView } from './components/PremarketGuideView'
 import { ProfitEffectReview } from './components/ProfitEffectReview'
 import { QuantzzDailyView } from './components/QuantzzDailyView'
 import { ReviewHome } from './components/ReviewHome'
@@ -42,6 +43,11 @@ export default function App() {
     loading: quantzzLoading,
     error: quantzzError,
   } = useQuantzzDaily(tab === 'quantzz-daily' ? effectiveDate : '')
+  const {
+    data: premarketGuide,
+    loading: premarketLoading,
+    error: premarketError,
+  } = usePremarketGuide(tab === 'premarket-guide')
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -70,6 +76,9 @@ export default function App() {
       <div className="tab-content">
         {tab === 'review-home' && data && (
           <ReviewHome data={data} emotionTrend={trend} marketTrend={marketTrend} onOpenTab={setTab} />
+        )}
+        {tab === 'premarket-guide' && (
+          <PremarketGuideView data={premarketGuide} loading={premarketLoading} error={premarketError} />
         )}
         {tab === 'quantzz-daily' && (
           <QuantzzDailyView data={quantzzDaily} loading={quantzzLoading} error={quantzzError} />

@@ -126,6 +126,12 @@ export function ReviewHome({ data, emotionTrend, marketTrend, onOpenTab }: Props
 
       <section className="home-action-grid">
         <ActionCard
+          title="盘前指引"
+          value="8:30"
+          text="结合昨日复盘、隔夜新闻公告和美股映射，早上先看方向。"
+          onClick={() => onOpenTab('premarket-guide')}
+        />
+        <ActionCard
           title="量化全景"
           value={data.emotion.level}
           text="先看情绪、空间板、人气核心和亏钱反馈是否互相印证。"

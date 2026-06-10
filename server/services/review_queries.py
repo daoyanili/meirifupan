@@ -923,6 +923,51 @@ def get_quantzz_daily_overview(conn: sqlite3.Connection, date: str, days: int = 
     }
 
 
+def get_premarket_guide(conn: sqlite3.Connection, guide_date: str) -> dict[str, Any] | None:
+    """Return a generated pre-market guide."""
+    row = conn.execute(
+        """
+        select guide_date, review_date, headline, market_tone, focus_plates,
+               watch_points, risk_points, catalyst_news, announcements,
+               us_markets, raw_payload, created_at, updated_at
+        from premarket_guides
+        where guide_date = ?
+        """,
+        (guide_date,),
+    ).fetchone()
+    if not row:
+        return None
+    result = _row_to_dict(row)
+    raw = _json_dict(result.get("raw_payload"))
+    result["generated_at"] = raw.get("generated_at") or result.get("updated_at") or result.get("created_at")
+    result["market_snapshot"] = raw.get("market_snapshot") or {}
+    result["hot_stocks"] = raw.get("hot_stocks") or []
+    result["space_stocks"] = raw.get("space_stocks") or []
+    result["focus_plates"] = _json_list(result.get("focus_plates"))
+    result["watch_points"] = _json_list(result.get("watch_points"))
+    result["risk_points"] = _json_list(result.get("risk_points"))
+    result["catalyst_news"] = _json_list(result.get("catalyst_news"))
+    result["announcements"] = _json_list(result.get("announcements"))
+    result["us_markets"] = _json_list(result.get("us_markets"))
+    result.pop("raw_payload", None)
+    return result
+
+
+def get_latest_premarket_guide(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """Return the latest generated pre-market guide."""
+    row = conn.execute(
+        """
+        select guide_date
+        from premarket_guides
+        order by guide_date desc
+        limit 1
+        """
+    ).fetchone()
+    if not row:
+        return None
+    return get_premarket_guide(conn, row["guide_date"])
+
+
 def get_saved_review(conn: sqlite3.Connection, date: str) -> dict[str, Any] | None:
     """Get the generated structured review if it has been saved."""
     row = conn.execute(

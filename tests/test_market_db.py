@@ -39,6 +39,10 @@ class MarketDbTests(unittest.TestCase):
             "broken_limit_up_events",
             "daily_reviews",
             "data_jobs",
+            "premarket_news",
+            "stock_announcements",
+            "us_stock_quotes",
+            "premarket_guides",
         }
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,13 +90,17 @@ class MarketDbTests(unittest.TestCase):
         self.assertEqual("生成复盘", job["details"]["steps"][0]["name"])
 
     def test_scheduler_next_run_time_rolls_to_tomorrow_after_run_time(self):
-        from daily_scheduler import next_run_time
+        from daily_scheduler import next_named_run_time, next_run_time
 
         before = datetime(2026, 6, 8, 17, 0)
         after = datetime(2026, 6, 8, 18, 0)
 
         self.assertEqual(datetime(2026, 6, 8, 17, 30), next_run_time("17:30", before))
         self.assertEqual(datetime(2026, 6, 9, 17, 30), next_run_time("17:30", after))
+        self.assertEqual(
+            ("premarket_update", datetime(2026, 6, 9, 8, 30)),
+            next_named_run_time({"premarket_update": "08:30", "daily_update": "17:30"}, after),
+        )
 
     def test_daily_update_records_missing_token_failure(self):
         import daily_update
@@ -896,6 +904,163 @@ class MarketDbTests(unittest.TestCase):
         self.assertEqual(1, overview["loss_feedback"]["limit_down_count"])
         self.assertEqual(1, overview["loss_feedback"]["broken_limit_up_count"])
         self.assertTrue(any(item["key"] == "auction" for item in overview["missing_sources"]))
+
+    def test_premarket_guide_combines_review_news_announcements_and_us_markets(self):
+        from db import MarketDB
+        from generate_premarket import generate_premarket_guide
+        from server.services.review_queries import get_premarket_guide
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "market.db"
+            db = MarketDB(db_path)
+            db.init_schema()
+            db.import_uplimit_day({
+                "date": "2026-06-09",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "801001",
+                        "plate_name": "算力",
+                        "plate_score": 100,
+                        "stocks": [
+                            {
+                                "stock_code": "600001",
+                                "stock_name": "算力龙头",
+                                "up_limit_desc": "3连板",
+                                "up_limit_keep_times": 3,
+                                "reason": "AI服务器订单增长",
+                            },
+                            {
+                                "stock_code": "300001",
+                                "stock_name": "算力跟随",
+                                "up_limit_desc": "首板",
+                                "up_limit_keep_times": 1,
+                                "reason": "算力租赁",
+                            },
+                        ],
+                    }
+                ],
+                "uplimit_hot": [["算力", "801001", 100]],
+                "plate_rank": [],
+            })
+            db.import_market_breadth("2026-06-09", {
+                "total_count": 5300,
+                "up_count": 3200,
+                "down_count": 1900,
+                "flat_count": 200,
+                "limit_up_count": 58,
+                "limit_down_count": 3,
+                "natural_limit_up_count": 55,
+                "natural_limit_down_count": 2,
+                "avg_change_pct": 0.76,
+                "amount": 1_650_000_000_000,
+            })
+            db.import_hot_stocks("2026-06-09", [
+                {
+                    "rank_no": 1,
+                    "stock_code": "600001",
+                    "stock_name": "算力龙头",
+                    "change_pct": 10.0,
+                    "source": "eastmoney_emappdata",
+                },
+                {
+                    "rank_no": 2,
+                    "stock_code": "000725",
+                    "stock_name": "面板趋势",
+                    "change_pct": 4.2,
+                    "source": "eastmoney_emappdata",
+                },
+            ])
+            db.import_hot_boards("2026-06-09", [
+                {
+                    "rank_no": 1,
+                    "board_code": "801001",
+                    "board_name": "算力",
+                    "change_pct": 3.2,
+                    "up_count": 24,
+                    "down_count": 5,
+                    "leading_stock": "算力龙头",
+                },
+            ], "concept")
+            db.import_premarket_news("2026-06-10", [
+                {
+                    "source": "cls",
+                    "published_at": "2026-06-10 07:20:00",
+                    "title": "英伟达隔夜上涨带动 AI 算力链关注",
+                    "content": "AI服务器和算力基础设施继续受资金关注",
+                    "url": "https://example.com/news/1",
+                }
+            ])
+            db.import_stock_announcements("2026-06-09", [
+                {
+                    "stock_code": "600001",
+                    "stock_name": "算力龙头",
+                    "notice_date": "2026-06-09",
+                    "notice_type": "重大事项",
+                    "title": "签订 AI 服务器大额订单",
+                    "url": "https://example.com/notice/1",
+                }
+            ])
+            db.import_us_stock_quotes("2026-06-10", [
+                {
+                    "symbol": "NVDA",
+                    "stock_name": "英伟达",
+                    "sector": "科技类",
+                    "latest_price": 145.2,
+                    "change_pct": 4.2,
+                    "change_amount": 5.8,
+                }
+            ])
+            db.close()
+
+            guide = generate_premarket_guide("2026-06-10", db_path=str(db_path))
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                saved = get_premarket_guide(conn, "2026-06-10")
+            finally:
+                conn.close()
+
+        self.assertEqual("2026-06-10", guide["guide_date"])
+        self.assertEqual("2026-06-09", guide["review_date"])
+        self.assertIn("算力", guide["headline"])
+        self.assertEqual("算力", guide["focus_plates"][0]["plate_name"])
+        self.assertEqual("NVDA", guide["us_markets"][0]["symbol"])
+        self.assertTrue(any("英伟达" in item["title"] for item in guide["catalyst_news"]))
+        self.assertTrue(any(item["stock_name"] == "算力龙头" for item in guide["announcements"]))
+        self.assertTrue(any("美股" in item["reason"] or "英伟达" in item["reason"] for item in guide["watch_points"]))
+        self.assertIsNotNone(saved)
+        self.assertEqual("2026-06-09", saved["review_date"])
+        self.assertEqual("算力", saved["focus_plates"][0]["plate_name"])
+
+    def test_premarket_review_date_prefers_complete_limit_up_day(self):
+        from db import MarketDB
+        from generate_premarket import resolve_review_date
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = MarketDB(Path(tmp) / "market.db")
+            db.init_schema()
+            db.import_uplimit_day({
+                "date": "2026-06-05",
+                "uplimit_reason": [
+                    {
+                        "plate_code": "801001",
+                        "plate_name": "算力",
+                        "stocks": [{"stock_code": "600001", "stock_name": "算力龙头"}],
+                    }
+                ],
+                "uplimit_hot": [],
+                "plate_rank": [],
+            })
+            db.import_market_breadth("2026-06-08", {
+                "total_count": 5300,
+                "up_count": 2000,
+                "down_count": 3000,
+                "flat_count": 300,
+                "amount": 1_200_000_000_000,
+            })
+            self.assertEqual("2026-06-05", resolve_review_date(db.conn, "2026-06-10"))
+            db.close()
 
     def test_import_limit_down_and_broken_boards_deduplicates_by_date_and_code(self):
         from db import MarketDB

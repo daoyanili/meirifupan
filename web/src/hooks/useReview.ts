@@ -4,6 +4,7 @@ import {
   fetchEmotionTrend,
   fetchDates,
   fetchMarketOverviewTrend,
+  fetchPremarketGuide,
   fetchQuantzzDaily,
   fetchInsights,
   fetchHot,
@@ -17,6 +18,7 @@ import type {
   HotData,
   DataJob,
   MarketOverviewTrendItem,
+  PremarketGuide,
   QuantzzDailyOverview,
 } from '../types'
 
@@ -169,6 +171,31 @@ export function useQuantzzDaily(date: string) {
       .finally(() => setLoading(false))
     return () => ctrl.abort()
   }, [date])
+
+  return { data, loading, error }
+}
+
+export function usePremarketGuide(enabled: boolean) {
+  const [data, setData] = useState<PremarketGuide | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      setLoading(false)
+      setError(null)
+      return
+    }
+    const ctrl = new AbortController()
+    setLoading(true)
+    fetchPremarketGuide(undefined, ctrl.signal)
+      .then(d => { setData(d); setError(null) })
+      .catch(e => {
+        if (e.name !== 'AbortError') setError(e.message)
+      })
+      .finally(() => setLoading(false))
+    return () => ctrl.abort()
+  }, [enabled])
 
   return { data, loading, error }
 }

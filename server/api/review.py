@@ -23,6 +23,8 @@ from server.services.review_queries import (
     get_limit_up_stats,
     get_market_environment,
     get_market_overview_trend,
+    get_latest_premarket_guide,
+    get_premarket_guide,
     get_quantzz_daily_overview,
     get_connection,
     get_recent_dates,
@@ -148,6 +150,19 @@ def get_quantzz_daily(
         if date not in available:
             raise HTTPException(status_code=404, detail=f"No data for date {date}.")
         return get_quantzz_daily_overview(conn, date, days)
+    finally:
+        conn.close()
+
+
+@router.get("/api/premarket")
+def get_premarket(date: str | None = Query(None, description="Guide date, e.g. 2026-06-10")):
+    """Return pre-market guidance. If no date is given, return the latest guide."""
+    conn = get_connection()
+    try:
+        guide = get_premarket_guide(conn, date) if date else get_latest_premarket_guide(conn)
+        if not guide:
+            raise HTTPException(status_code=404, detail=f"No premarket guide for {date or 'latest'}.")
+        return guide
     finally:
         conn.close()
 
